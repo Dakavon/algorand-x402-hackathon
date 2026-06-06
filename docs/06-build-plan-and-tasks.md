@@ -77,8 +77,21 @@ algorand/                      # the project root (team repo)
 | USDC faucet | https://faucet.circle.com (select Algorand Testnet; ~20 USDC, 1 req / 2h) |
 | Explorer | https://lora.algokit.io/testnet |
 
-**Server packages:** `@x402/core @x402/avm @x402/hono hono @hono/node-server dotenv` (+ `-D typescript @types/node tsx`)
-**Agent packages:** `@x402/core @x402/fetch @x402/avm dotenv hono @hono/node-server` (+ `-D typescript @types/node tsx`)
+**Server packages:** `@x402/hono @x402/core @x402/avm hono @hono/node-server dotenv` (+ `-D typescript @types/node tsx`)
+**Agent packages:** `@x402/fetch @x402/core @x402/avm @algorandfoundation/algokit-utils dotenv` (+ `-D typescript @types/node tsx`)
+
+> ✅ **Verified API (x402 v2.11.0)** — corrects the guessed snippets below. Confirmed against the
+> official demo and now implemented in `server/` + `consumer/agent/` (see
+> [07-prephase-setup-and-mock-plan.md](07-prephase-setup-and-mock-plan.md) §4):
+> - **Server:** `paymentMiddleware({ "GET /energy/buy": { accepts, ... } }, server)` where
+>   `server = new x402ResourceServer(new HTTPFacilitatorClient({url})).register(NETWORK, new ExactAvmScheme())`.
+>   `accepts = [{ scheme: "exact", price: "$0.01", network: NETWORK, payTo: AVM_ADDRESS }]`. Price is a
+>   **`$` string** (facilitator maps to USDC). The basic flow uses **middleware, not a custom handler** —
+>   the custom-handler / per-request-price route is only needed for **dynamic pricing (Phase 2)**.
+> - **Client:** mnemonic → base64 secret via `@algorandfoundation/algokit-utils` (`seedFromMnemonic`
+>   + `ed25519SigningKeyFromWrappedSecret`) → `toClientAvmSigner(secret)` →
+>   `new x402Client().register("algorand:*", new ExactAvmScheme(signer))` → `wrapFetchWithPayment(fetch, client)`.
+> - **Env:** server `AVM_ADDRESS`, `FACILITATOR_URL`, `PORT`; agent `AVM_MNEMONIC`, `RESOURCE_SERVER_URL`, `ENDPOINT_PATH`.
 
 **.env files (never commit):**
 - `server/.env`: `SELLER_ADDRESS`, `FACILITATOR_URL=https://facilitator.goplausible.xyz`, `PI_URL=http://raspberrypi.local:8001`

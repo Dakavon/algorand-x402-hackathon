@@ -1,0 +1,14 @@
+{
+  "name": "energy-setup",
+  "private": true,
+  "type": "module",
+  "description": "Account helper scripts (generate / opt-in / balances) for Algorand TestNet",
+  "scripts": {
+    "generate": "node generate.mjs",
+    "optin": "node optin.mjs",
+    "balances": "node balances.mjs"
+  },
+  "dependencies": {
+    "algosdk": "^2.9.0"
+  }
+}
