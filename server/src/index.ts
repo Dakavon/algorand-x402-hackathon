@@ -9,8 +9,9 @@ import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
 import { ExactAvmScheme } from "@x402/avm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 config();
@@ -92,6 +93,13 @@ const fallbackProducer: ProducerStatus = {
   stale: true,
 };
 
+// Runtime sim controls driven by the dashboard (POST /control/*). These only shape
+// the no-Pi fallback producer; a live Pi's fresh /status still overrides them.
+const simControl = {
+  ev_plugged: mockEvPlugged,
+  price_per_kwh: Number(pricePerKwhUsd),
+};
+
 const fallbackAgent: AgentState = {
   state: "IDLE",
   delivery_remaining_kwh: 0,
@@ -137,6 +145,36 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function postAgentJson(path: string, body: unknown): Promise<boolean> {
+  try {
+    const r = await fetch(`${agentUrl}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Producer status the rest of the app should read. A fresh Pi wins; otherwise the
+// dashboard-controllable simulation (simControl) drives it.
+function currentProducerStatus(): ProducerStatus {
+  if (producerHealth() === "ok") {
+    return { ...producerCache, stale: false };
+  }
+  return {
+    ...fallbackProducer,
+    ts: Date.now() / 1000,
+    ev_plugged: simControl.ev_plugged,
+    solar_kw: simControl.ev_plugged ? 4.2 : 0,
+    price_per_kwh: simControl.price_per_kwh,
+    has_offer: true,
+    stale: true,
+  };
+}
+
 function producerHealth(): HealthStatus {
   if (!producerLastSeenMs) return "down";
   const age = Date.now() - producerLastSeenMs;
@@ -172,10 +210,7 @@ function appendPayment(row: PaymentRow): void {
 }
 
 function snapshotPayload() {
-  const producerStatus = {
-    ...producerCache,
-    stale: producerHealth() !== "ok",
-  };
+  const producerStatus = currentProducerStatus();
   const payments = readPaymentsLog();
   const soldKwh = payments.reduce((sum, row) => sum + row.kwh, 0);
   const spentUsdc = payments.reduce((sum, row) => sum + row.price_paid_usdc, 0);
@@ -251,6 +286,9 @@ const server = new x402ResourceServer(facilitatorClient).register(
 
 const app = new Hono();
 
+// Allow the dashboard (separate origin, e.g. :5173 or a Lovable export) to call us.
+app.use("*", cors());
+
 // Free: health/status (no payment).
 app.get("/health", c =>
   c.json({
@@ -262,7 +300,7 @@ app.get("/health", c =>
   }),
 );
 
-app.get("/status", c => c.json({ ...producerCache, stale: producerHealth() !== "ok" }));
+app.get("/status", c => c.json(currentProducerStatus()));
 
 app.get("/api/health", c =>
   c.json({
@@ -342,6 +380,63 @@ app.post("/report-payment", async c => {
   return c.json({ ok: true });
 });
 
+// --- Dashboard control plane (interactive demo) ---
+// Plug/unplug the EV: start or stop the autonomous buying loop.
+app.post("/control/ev", async c => {
+  const body = (await c.req.json().catch(() => ({}))) as { plugged?: boolean };
+  simControl.ev_plugged = Boolean(body.plugged);
+  await postAgentJson("/pause", { paused: !simControl.ev_plugged });
+  addEvent({
+    ts: nowSeconds(),
+    type: "DECISION",
+    message: `EV ${simControl.ev_plugged ? "plugged in" : "unplugged"} from dashboard`,
+  });
+  return c.json({ ok: true, ev_plugged: simControl.ev_plugged });
+});
+
+// Fire one immediate purchase (manual buy-one).
+app.post("/control/buy", async c => {
+  const body = (await c.req.json().catch(() => ({}))) as { kwh?: number };
+  const ok = await postAgentJson("/buy-now", { kwh: body.kwh });
+  return c.json({ ok });
+});
+
+// Live knobs: per-kWh price (producer) + budget / max-price policy (agent).
+app.post("/control/config", async c => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    price_per_kwh?: number;
+    budget_usd?: number;
+    max_price_per_kwh?: number;
+  };
+  if (typeof body.price_per_kwh === "number") simControl.price_per_kwh = body.price_per_kwh;
+  const agentCfg: Record<string, number> = {};
+  if (typeof body.budget_usd === "number") agentCfg.budget_usd = body.budget_usd;
+  if (typeof body.max_price_per_kwh === "number") agentCfg.max_price_per_kwh = body.max_price_per_kwh;
+  if (Object.keys(agentCfg).length) await postAgentJson("/config", agentCfg);
+  return c.json({ ok: true, price_per_kwh: simControl.price_per_kwh });
+});
+
+// Stop buying (kill switch).
+app.post("/control/stop", async c => {
+  simControl.ev_plugged = false;
+  await postAgentJson("/pause", { paused: true });
+  addEvent({ ts: nowSeconds(), type: "DECISION", message: "Buying stopped from dashboard" });
+  return c.json({ ok: true });
+});
+
+// Reset the session: clear the on-ledger history + restore the agent's budget.
+app.post("/control/reset", async c => {
+  try {
+    writeFileSync(PAYMENTS_LOG, "", "utf8");
+  } catch {
+    // non-fatal
+  }
+  events.length = 0;
+  await postAgentJson("/reset", {});
+  addEvent({ ts: nowSeconds(), type: "DECISION", message: "Session reset from dashboard" });
+  return c.json({ ok: true });
+});
+
 // Paywalled: buying energy requires an x402 payment.
 app.use(
   paymentMiddleware(
@@ -363,11 +458,12 @@ app.get("/energy/buy", async c => {
     return c.json(apiError("INVALID_KWH", "kwh query must be a positive number", false), 400);
   }
 
-  if (!producerCache.has_offer) {
+  const status = currentProducerStatus();
+  if (!status.has_offer) {
     return c.json(apiError("NO_OFFER_AVAILABLE", "No surplus energy is available", true), 409);
   }
 
-  const unitPrice = producerCache.price_per_kwh || Number(pricePerKwhUsd);
+  const unitPrice = status.price_per_kwh || Number(pricePerKwhUsd);
   const pricePaidUsdc = Number((requestedKwh * unitPrice).toFixed(6));
 
   if (producerHealth() === "ok") {
