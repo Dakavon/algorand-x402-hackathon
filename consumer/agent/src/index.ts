@@ -1,13 +1,8 @@
-// Energy BUYER — autonomous EV agent (x402 client).
-// Requests energy from the seller's server; x402 transparently pays in USDC on
-// Algorand TestNet, signing with the buyer's mnemonic.
-//
-// Verified against algorandfoundation/x402-demo (x402 v2.11.0).
-//
-// Phase 0/1: a single one-shot purchase. The state-machine loop (IDLE→EVAL→PAY→
-// CHARGING) and dynamic pricing come in Phase 2.
+// Energy BUYER — autonomous EV agent (x402 client + state server).
 
 import { config } from "dotenv";
+import { serve } from "@hono/node-server";
+import { Hono } from "hono";
 import { x402Client, wrapFetchWithPayment, x402HTTPClient } from "@x402/fetch";
 import { toClientAvmSigner } from "@x402/avm";
 import { ExactAvmScheme } from "@x402/avm/exact/client";
@@ -20,69 +15,302 @@ import { seedFromMnemonic } from "@algorandfoundation/algokit-utils/algo25";
 config();
 
 const avmMnemonic = process.env.AVM_MNEMONIC;
-const baseURL = process.env.RESOURCE_SERVER_URL ?? "http://localhost:4021";
+const resourceServerUrl = process.env.RESOURCE_SERVER_URL ?? "http://localhost:4021";
 const endpointPath = process.env.ENDPOINT_PATH ?? "/energy/buy";
-const url = `${baseURL}${endpointPath}`;
+const buyUrl = `${resourceServerUrl}${endpointPath}`;
+const port = Number(process.env.PORT ?? 4022);
+const budgetUsd = Number(process.env.BUDGET_USD ?? 5);
+const maxPricePerKwh = Number(process.env.MAX_PRICE_PER_KWH ?? 0.2);
+const kwhPerPurchase = Number(process.env.KWH_PER_PURCHASE ?? 1);
+const pollIntervalMs = Number(process.env.POLL_INTERVAL_MS ?? 2000);
+const accel = Number(process.env.ACCEL ?? 60);
+const chargeRateKw = 3;
 
-if (!avmMnemonic || avmMnemonic.includes("PASTE")) {
-  console.error("❌ AVM_MNEMONIC (buyer 25-word mnemonic) is required in consumer/agent/.env");
-  process.exit(1);
+type AgentLifecycle = "IDLE" | "EVALUATING" | "PAYING" | "CHARGING" | "WAITING" | "ERROR";
+
+type ProducerStatus = {
+  ts: number;
+  solar_kw: number;
+  battery_kwh: number;
+  battery_pct: number;
+  price_per_kwh: number;
+  ev_plugged: boolean;
+  has_offer: boolean;
+  stale?: boolean;
+};
+
+type AgentState = {
+  state: AgentLifecycle;
+  solar_kw: number;
+  battery_pct: number;
+  price_per_kwh: number;
+  delivery_remaining_kwh: number;
+  budget_remaining_usdc: number;
+  max_price_per_kwh: number;
+  last_tx_id?: string;
+  decision_reason?: string;
+};
+
+type AgentEvent = {
+  ts: number;
+  type: "STATE" | "DECISION" | "PAYMENT" | "ERROR";
+  message: string;
+  kwh?: number;
+  price_usdc?: number;
+  tx_id?: string;
+  lora_url?: string;
+};
+
+type BuyResponse = {
+  granted_kwh: number;
+  price_paid_usdc: number;
+  tx_id?: string;
+  lora_url?: string;
+};
+
+const events: AgentEvent[] = [];
+let currentState: AgentState = {
+  state: "IDLE",
+  solar_kw: 0,
+  battery_pct: 0,
+  price_per_kwh: 0,
+  delivery_remaining_kwh: 0,
+  budget_remaining_usdc: Number(budgetUsd.toFixed(6)),
+  max_price_per_kwh: maxPricePerKwh,
+  decision_reason: "Initializing",
+};
+
+let paymentFetch: ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) | null =
+  null;
+let paymentInspector: x402HTTPClient | null = null;
+let loopBusy = false;
+let lastTickMs = Date.now();
+
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
 }
 
-// Convert a standard 25-word Algorand mnemonic into the base64 secret key the
-// AVM signer expects (seed || pubkey). Lifted from the official demo.
-async function getSecretKeyFromMnemonic(mnemonic: string): Promise<string> {
-  const seed = seedFromMnemonic(mnemonic);
+function pushEvent(event: AgentEvent): void {
+  events.unshift(event);
+  if (events.length > 100) {
+    events.length = 100;
+  }
+}
+
+function setState(nextState: AgentLifecycle, reason: string): void {
+  if (currentState.state !== nextState) {
+    pushEvent({
+      ts: nowSeconds(),
+      type: "STATE",
+      message: `${currentState.state} -> ${nextState}`,
+    });
+  }
+  currentState = {
+    ...currentState,
+    state: nextState,
+    decision_reason: reason,
+  };
+}
+
+function setDecision(reason: string): void {
+  currentState = {
+    ...currentState,
+    decision_reason: reason,
+  };
+  pushEvent({
+    ts: nowSeconds(),
+    type: "DECISION",
+    message: reason,
+  });
+}
+
+function applyDeliveryTick(): void {
+  const now = Date.now();
+  const dtSeconds = (now - lastTickMs) / 1000;
+  lastTickMs = now;
+  if (currentState.delivery_remaining_kwh <= 0) return;
+
+  const delivered = chargeRateKw * (accel * dtSeconds / 3600);
+  const nextDelivery = Math.max(0, currentState.delivery_remaining_kwh - delivered);
+  currentState = {
+    ...currentState,
+    delivery_remaining_kwh: Number(nextDelivery.toFixed(6)),
+  };
+}
+
+async function fetchProducerStatus(): Promise<ProducerStatus> {
+  const response = await fetch(`${resourceServerUrl}/status`);
+  if (!response.ok) {
+    throw new Error(`status fetch failed (${response.status})`);
+  }
+  return (await response.json()) as ProducerStatus;
+}
+
+async function buyEnergy(kwh: number): Promise<BuyResponse> {
+  if (!paymentFetch || !paymentInspector) {
+    throw new Error("AVM_MNEMONIC is not configured; agent can only observe state");
+  }
+
+  const response = await paymentFetch(`${buyUrl}?kwh=${kwh}`, { method: "GET" });
+  const body = (await response.json()) as BuyResponse;
+  if (!response.ok) {
+    throw new Error(`buy failed (${response.status}): ${JSON.stringify(body)}`);
+  }
+
+  const settle = paymentInspector.getPaymentSettleResponse(name => response.headers.get(name));
+  const settleRecord = settle as Record<string, unknown> | null;
+  const txId =
+    body.tx_id ??
+    (settleRecord?.["transaction"] as string | undefined) ??
+    (settleRecord?.["txId"] as string | undefined) ??
+    (settleRecord?.["txID"] as string | undefined);
+
+  return {
+    ...body,
+    ...(txId ? { tx_id: txId } : {}),
+  };
+}
+
+async function initPaymentClient(): Promise<void> {
+  if (!avmMnemonic || avmMnemonic.includes("PASTE")) {
+    currentState = {
+      ...currentState,
+      decision_reason: "No mnemonic configured: running in observer mode",
+    };
+    return;
+  }
+
+  const seed = seedFromMnemonic(avmMnemonic);
   const seedCopy = new Uint8Array(seed);
   const wrappedSeed: WrappedEd25519Seed = {
     unwrapEd25519Seed: async () => seed,
     wrapEd25519Seed: async () => {},
   };
   const wrappedSecret = await ed25519SigningKeyFromWrappedSecret(wrappedSeed);
-  return Buffer.concat([
+  const secretKey = Buffer.concat([
     Buffer.from(seedCopy),
     Buffer.from(wrappedSecret.ed25519Pubkey),
   ]).toString("base64");
+
+  const signer = toClientAvmSigner(secretKey);
+  const client = new x402Client().register("algorand:*", new ExactAvmScheme(signer));
+  paymentFetch = wrapFetchWithPayment(fetch, client);
+  paymentInspector = new x402HTTPClient(client);
+  console.log(`🔌 Agent signer address: ${signer.address}`);
 }
 
-async function main(): Promise<void> {
-  const secretKey = await getSecretKeyFromMnemonic(avmMnemonic as string);
-  const avmSigner = toClientAvmSigner(secretKey);
+async function agentLoop(): Promise<void> {
+  if (loopBusy) return;
+  loopBusy = true;
 
-  const client = new x402Client().register("algorand:*", new ExactAvmScheme(avmSigner));
-  console.info(`🔌 EV agent (buyer): ${avmSigner.address}`);
-  console.log(`→ requesting energy from ${url}\n`);
+  try {
+    applyDeliveryTick();
+    const producer = await fetchProducerStatus();
 
-  const fetchWithPayment = wrapFetchWithPayment(fetch, client);
-  const response = await fetchWithPayment(url, { method: "GET" });
-  const body = await response.json();
+    currentState = {
+      ...currentState,
+      solar_kw: producer.solar_kw,
+      battery_pct: producer.battery_pct,
+      price_per_kwh: producer.price_per_kwh,
+      max_price_per_kwh: maxPricePerKwh,
+    };
 
-  if (!response.ok) {
-    console.log(`❌ no payment settled (status ${response.status}):`, body);
-    process.exit(1);
-  }
+    if (!producer.ev_plugged) {
+      setState("IDLE", "EV is unplugged");
+      return;
+    }
 
-  console.log("✅ energy granted:", body);
+    if (currentState.delivery_remaining_kwh > 0) {
+      setState("CHARGING", `Delivering ${currentState.delivery_remaining_kwh.toFixed(2)} kWh`);
+      return;
+    }
 
-  const settle = new x402HTTPClient(client).getPaymentSettleResponse(name =>
-    response.headers.get(name),
-  );
-  console.log("\n💸 payment settled:", JSON.stringify(settle, null, 2));
+    if (!producer.has_offer) {
+      setState("WAITING", "No producer offer available");
+      return;
+    }
 
-  // Best-effort: surface the tx id as a clickable explorer link.
-  const s = settle as Record<string, unknown> | null;
-  const txId =
-    (s?.["transaction"] as string | undefined) ??
-    (s?.["txId"] as string | undefined) ??
-    (s?.["txID"] as string | undefined);
-  if (txId) {
-    console.log(`\n🔗 explorer: https://lora.algokit.io/testnet/tx/${txId}`);
-  } else {
-    console.log("\n🔗 explorer: https://lora.algokit.io/testnet  (find the tx id above)");
+    if (producer.price_per_kwh > maxPricePerKwh) {
+      setState(
+        "WAITING",
+        `Price ${producer.price_per_kwh.toFixed(3)} exceeds max ${maxPricePerKwh.toFixed(3)}`,
+      );
+      return;
+    }
+
+    const estimatedCost = Number((kwhPerPurchase * producer.price_per_kwh).toFixed(6));
+    if (currentState.budget_remaining_usdc < estimatedCost) {
+      setState("WAITING", "Budget exhausted for next purchase");
+      return;
+    }
+
+    setState("EVALUATING", "Policy passed; preparing payment");
+    setDecision(
+      `Buying ${kwhPerPurchase.toFixed(2)} kWh because price ${producer.price_per_kwh.toFixed(3)} <= max ${maxPricePerKwh.toFixed(3)}`,
+    );
+    setState("PAYING", "Submitting x402 payment");
+
+    const result = await buyEnergy(kwhPerPurchase);
+    currentState = {
+      ...currentState,
+      delivery_remaining_kwh: Number((currentState.delivery_remaining_kwh + result.granted_kwh).toFixed(6)),
+      budget_remaining_usdc: Number(
+        Math.max(0, currentState.budget_remaining_usdc - result.price_paid_usdc).toFixed(6),
+      ),
+      ...(result.tx_id ? { last_tx_id: result.tx_id } : {}),
+    };
+
+    pushEvent({
+      ts: nowSeconds(),
+      type: "PAYMENT",
+      message: `Paid ${result.price_paid_usdc.toFixed(3)} USDC for ${result.granted_kwh.toFixed(2)} kWh`,
+      kwh: result.granted_kwh,
+      price_usdc: result.price_paid_usdc,
+      ...(result.tx_id ? { tx_id: result.tx_id } : {}),
+      ...(result.lora_url ? { lora_url: result.lora_url } : {}),
+    });
+
+    setState("CHARGING", `Delivery started (${currentState.delivery_remaining_kwh.toFixed(2)} kWh pending)`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown agent error";
+    pushEvent({
+      ts: nowSeconds(),
+      type: "ERROR",
+      message,
+    });
+    setState("WAITING", message);
+  } finally {
+    loopBusy = false;
   }
 }
 
-main().catch(error => {
-  console.error(error?.response?.data?.error ?? error);
-  process.exit(1);
+const app = new Hono();
+
+app.get("/health", c =>
+  c.json({
+    ok: true,
+    state: currentState.state,
+    ts: nowSeconds(),
+  }),
+);
+
+app.get("/state", c => c.json(currentState));
+
+app.get("/events", c => {
+  const limit = Math.max(1, Math.min(100, Number(c.req.query("limit") ?? "100") || 100));
+  return c.json(events.slice(0, limit));
 });
+
+await initPaymentClient();
+void agentLoop();
+setInterval(() => {
+  void agentLoop();
+}, pollIntervalMs);
+
+serve({ fetch: app.fetch, port });
+
+console.log(`🤖 Consumer agent service listening at http://localhost:${port}`);
+console.log(`   server : ${resourceServerUrl}`);
+console.log(`   buy    : ${endpointPath}`);
+console.log(`   budget : ${budgetUsd.toFixed(2)} USDC`);
+console.log(`   max px : ${maxPricePerKwh.toFixed(3)} USDC/kWh`);
