@@ -66,7 +66,7 @@ Solar → Self-consumption → Storage → Paid sharing → Neighbor / EV
 - **Raspberry Pi (4)** — Producer service (sensors + battery sim + pricing + SQLite)
 - **Breadboard + B50K potentiometer** → MCP3008 ADC (SPI) → Solar output (0–5 kW)
 - **Breadboard + jumper/switch** → GPIO pin → "EV plug inserted" trigger
-- **Laptop/PC** → x402 Hono server + Consumer Agent + Streamlit Dashboard
+- **Laptop/PC** → x402 Hono server + Consumer Agent + React Dashboard
 
 ### Producer (Pi — Python only)
 - **FastAPI** — GPIO reads, battery simulation, pricing formula, SQLite persistence
@@ -89,9 +89,9 @@ Solar → Self-consumption → Storage → Paid sharing → Neighbor / EV
 - **Wired Ethernet** — Pi ↔ Laptop direct link. No venue WiFi dependency.
 - Static IP or mDNS (`raspberrypi.local`) for Pi discovery.
 
-### Dashboard (Laptop — Python)
-- Streamlit — live gauges, time-series charts (from Pi SQLite), payment log
-- Queries Pi `/history` for charts, Hono `/status` for live data, Agent for events
+### Dashboard (Laptop — React/Vite)
+- React — live gauges, time-series charts, energy flow, agent state, payment log
+- Queries Hono `/api/*` dashboard endpoints for producer history, live state, agent events, and payments
 
 ---
 
@@ -172,7 +172,7 @@ Purchases decrement battery instantly (`POST /consume`). No EV draw in the tick 
 
 ---
 
-## 🖥️ UI (Streamlit)
+## 🖥️ UI (React)
 
 - Solar output (kW) — real-time from potentiometer input
 - Battery level (%) — sawtooth: drops on purchase, recovers from solar

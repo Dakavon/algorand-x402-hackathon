@@ -15,7 +15,7 @@ A physical, interactive demo across two machines on a wired Ethernet link.
 | **Producer service** | Raspberry Pi 4 | Python / FastAPI | 8001 | Reads hardware, simulates battery, computes price, SQLite history |
 | **x402 Server** | Laptop | TypeScript / Hono | 4021 | Polls Pi, wraps `/energy/buy` behind x402 paywall, verifies+settles, logs |
 | **Consumer Agent** | Laptop | TypeScript | 4022 | Autonomous buyer: state machine, evaluates price vs budget, pays, tracks delivery |
-| **Dashboard** | Laptop | Python / Streamlit | 8501 | Live gauges, charts, payment log with Lora links |
+| **Dashboard** | Laptop | React / Vite | 5173 | Live gauges, charts, payment log with Lora links |
 
 **Hardware:** Raspberry Pi 4 + breadboard. B50K potentiometer → MCP3008 ADC (SPI) → solar
 output (0–5 kW). Jumper/switch → GPIO17 → "EV plug inserted" trigger. Laptop ↔ Pi over **wired
@@ -31,7 +31,7 @@ Potentiometer/GPIO → Pi FastAPI (:8001) → Hono x402 server (:4021) → Consu
                           │                        │                         │
                        SQLite                  JSONL log              x402 payment
                           │                        │                         ▼
-                          └──────────► Streamlit Dashboard (:8501) ◄── Algorand Testnet
+                          └──────────► React Dashboard (:5173) ◄── Algorand Testnet
                                                                      (USDC settle via facilitator)
 ```
 
@@ -56,9 +56,10 @@ algorand/                      # the project root (team repo)
 │   │   ├── .env.template      # BUYER_MNEMONIC, SERVER_URL, BUDGET_USD
 │   │   ├── package.json
 │   │   └── tsconfig.json
-│   └── dashboard/             # Laptop — Python
-│       ├── app.py             # Streamlit
-│       └── requirements.txt   # streamlit, requests, plotly
+│   └── dashboard/             # Laptop — React/Vite
+│       ├── src/               # React components, hooks, API client
+│       ├── package.json
+│       └── vite.config.ts
 ├── idea.md
 └── plan.md
 ```
@@ -160,12 +161,13 @@ when `<= 0`, agent may buy again.
 - [ ] **Owner: J, support: B.** State server (Hono :4022): `GET /state`, `GET /events`.
 - **Done when:** agent autonomously buys, transitions correctly, re-buys after delivery, enforces budget; `/state` + `/events` correct; tx visible on Lora.
 
-### Phase 5 — Streamlit dashboard (Python/laptop, ~4h) — needs 2/3/4
-- [ ] **Owner: S, support: B.** Auto-refresh (~2s). Gauges (`st.metric`) for solar/battery/price from Hono `/status`.
-- [ ] **Owner: S, support: N.** Plotly time-series (solar, battery sawtooth, price + budget line) from Pi `/history`.
-- [ ] **Owner: S, support: J.** Agent state badge from `/state`; EV flow indicator (3 kW when delivering).
-- [ ] **Owner: S, support: B.** Payment log (`st.dataframe`) from `/events` with **clickable Lora explorer links**.
-- **Done when:** gauges track potentiometer; charts show sawtooth; payments show with Lora links; state badge correct.
+### Phase 5 — React dashboard (laptop, ~4h) — needs 2/3/4
+- [ ] **Owner: S, support: B.** React/Vite dashboard on :5173 with auto-refresh (~2s) against Hono `/api/*` endpoints.
+- [ ] **Owner: S, support: B.** Build against mocked JSON first; confirm contracts in [backend-design-spec.md](backend-design-spec.md) and [frontend-react-design-spec.md](frontend-react-design-spec.md).
+- [ ] **Owner: S, support: N.** Time-series charts for solar, battery sawtooth, and price from `/api/history`.
+- [ ] **Owner: S, support: J.** Agent state, decision reason, delivery countdown, and EV flow indicator from `/api/snapshot` and `/api/events`.
+- [ ] **Owner: S, support: B.** Payment ledger with settled USDC tx IDs and **clickable Lora explorer links**.
+- **Done when:** gauges track potentiometer; charts show sawtooth; payments show with Lora links; state badge correct; stale/offline backend states are visible.
 
 ### Phase 6 — Integration & demo polish (~4h, together)
 - [ ] **Owner: B, support: N.** Network: static IPs / verify `raspberrypi.local` over Ethernet.

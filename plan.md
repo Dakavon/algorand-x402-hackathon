@@ -24,11 +24,11 @@ Raspberry Pi 4 (Python only :8001)       Laptop
 │  └─ POST /consume { kwh }     │      │  ├─ delivery tracking (3 kW rate)    │
 │      (decrements battery)     │      │  └─ GET /state, GET /events          │
 │                               │      │                                      │
-│  Mock fallback if no SPI/GPIO │      │  Streamlit Dashboard :8501 (Python)  │
-│                               │      │  ├─ Hono /status → gauges + price    │
-│                               │      │  ├─ Pi /history → time-series charts │
-│                               │      │  ├─ Agent /state → state badge       │
-│                               │      │  └─ Agent /events → payment log      │
+│  Mock fallback if no SPI/GPIO │      │  React Dashboard :5173 (Vite/TS)     │
+│                               │      │  ├─ Hono /api/snapshot → gauges      │
+│                               │      │  ├─ Hono /api/history → charts       │
+│                               │      │  ├─ Hono /api/events → state/log     │
+│                               │      │  └─ Lora links → payment proof       │
 └────────────────────────────────┘      └──────────────────────────────────────┘
 ```
 
@@ -56,8 +56,9 @@ algorand/
 │   │   ├── package.json
 │   │   └── tsconfig.json
 │   └── dashboard/
-│       ├── app.py             # Streamlit app
-│       └── requirements.txt   # streamlit, requests, plotly
+│       ├── src/               # React components, hooks, API client
+│       ├── package.json
+│       └── vite.config.ts
 │
 ├── idea.md
 └── plan.md
@@ -165,7 +166,7 @@ Phase 2: FastAPI + SQLite +      Phase 3: Hono server (mock Pi
                                  Phase 4: Consumer agent +
                                    state machine + delivery +
                                    /state + /events
-Phase 5: help with dashboard     Phase 5: Streamlit dashboard
+Phase 5: help with dashboard     Phase 5: React dashboard
 Phase 6 (together)               Phase 6 (together)
 ```
 
@@ -414,20 +415,20 @@ Phase 6 (together)               Phase 6 (together)
 
 ---
 
-## Phase 5 — Streamlit Dashboard (Python, Laptop)
+## Phase 5 — React Dashboard (Vite/TypeScript, Laptop)
 
 **Goal**: Single-page real-time visualization of all system state.
-**Time**: ~4 hours (Person B, Person A assists)
+**Time**: ~4 hours (S owns, B supports; Person A/N assists with producer data)
 **Dependency**: Phases 2, 3, 4 running
 
 ### Data Sources
 
 | Source | URL | Frequency | Data |
 |--------|-----|-----------|------|
-| Hono | `localhost:4021/status` | 2s | Live gauges + price |
-| Pi | `raspberrypi.local:8001/history?minutes=5` | 5s | Time-series charts |
-| Agent | `localhost:4022/state` | 2s | Agent state + delivery |
-| Agent | `localhost:4022/events` | 2s | Payment event log |
+| Hono | `localhost:4021/api/snapshot` | 2s | Live gauges, agent state, totals, health |
+| Hono | `localhost:4021/api/history?minutes=5` | 5s | Time-series charts |
+| Hono | `localhost:4021/api/events?limit=100` | 2s | Agent decisions + payment event log |
+| Hono | `localhost:4021/api/payments` | 2s | Settled payment rows |
 
 ### Layout
 
@@ -451,22 +452,22 @@ Phase 6 (together)               Phase 6 (together)
 
 ### Implementation
 
-1. `consumer/dashboard/requirements.txt`: `streamlit`, `requests`, `plotly`
+1. `consumer/dashboard/package.json`: React, Vite, TypeScript, charting library.
 
-2. `consumer/dashboard/app.py`:
-   - Auto-refresh via `st.rerun()` with 2s sleep
-   - Gauges: `st.metric` for solar, battery, price
-   - Charts: `plotly.graph_objects` line charts from `/history`
-   - EV flow indicator: 3 kW when `delivery_remaining > 0`, else 0
-   - Event log: `st.dataframe` with Lora explorer links
+2. `consumer/dashboard/src/`:
+   - `api/client.ts`: typed fetch helpers for `/api/snapshot`, `/api/history`, `/api/events`, `/api/payments`.
+   - `hooks/useDashboardData.ts`: polling every 2s for snapshot/events and 5s for history.
+   - Components: metric strip, energy flow, solar/price chart, battery chart, agent panel, payment ledger, system health.
+   - Mock JSON fixtures so S can build before all backend services are live.
 
-3. Test: `streamlit run app.py`
+3. Test: `pnpm dev --host 0.0.0.0 --port 5173`
 
 ### Done when
 - Live gauges update with potentiometer changes
 - Charts show battery sawtooth pattern during purchases
 - Payment events show with clickable Lora links
 - Agent state badge reflects current state
+- Stale/offline producer or agent state is visible
 
 ---
 
@@ -490,7 +491,7 @@ Phase 6 (together)               Phase 6 (together)
    # start.sh
    cd server && pnpm tsx src/index.ts &
    cd consumer/agent && pnpm tsx src/index.ts &
-   cd consumer/dashboard && streamlit run app.py &
+    cd consumer/dashboard && pnpm dev --host 0.0.0.0 --port 5173 &
    ```
 
 4. **End-to-end dry run** (full demo sequence):

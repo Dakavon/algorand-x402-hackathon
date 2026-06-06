@@ -25,7 +25,7 @@ an EV-like consumer agent decides whether to buy, and x402 on Algorand settles t
 | Producer service | N | Raspberry Pi or laptop mock, Python/FastAPI, port 8001 | Sensor/mock state, battery sim, price, SQLite history, `/consume`. |
 | x402 server | N with B pairing | Laptop, TypeScript/Hono, port 4021 | Poll producer, return free status, protect `/energy/buy` with x402, log payments. |
 | Consumer agent | J with B pairing | Laptop, TypeScript/Hono, port 4022 | State machine, budget decisions, x402 client, event log. |
-| Dashboard | S | Laptop, Python/Streamlit, port 8501 | Live visualization and clickable transaction evidence. |
+| Dashboard | S | Laptop, React/Vite, port 5173 | Live visualization and clickable transaction evidence. |
 
 ## Data Flow
 
@@ -39,6 +39,20 @@ an EV-like consumer agent decides whether to buy, and x402 on Algorand settles t
 8. Owner: N and B. Facilitator verifies and settles the payment on Algorand TestNet.
 9. Owner: N. x402 server calls producer `/consume` after settlement succeeds.
 10. Owner: S. Dashboard shows updated state, agent event, and Lora transaction link.
+
+## Dashboard API Boundary
+
+The browser dashboard is read-only. It does not hold wallet keys and does not sign x402 payments.
+The Hono x402 server exposes dashboard aggregation endpoints under `/api/*` so the React app can
+poll one backend origin during the demo.
+
+| Endpoint | Owner | Purpose |
+|---|---|---|
+| `GET /api/snapshot` | B with S | Current producer state, agent state, totals, and service health. |
+| `GET /api/history?minutes=10` | B with N and S | Producer time-series data for solar, battery, and price charts. |
+| `GET /api/events?limit=100` | B with J and S | Agent decisions, payments, errors, and Lora transaction links. |
+| `GET /api/payments` | B with N and S | Settled payment log from the x402 server JSONL file. |
+| `GET /api/health` | B | Health summary for producer, x402 server, and agent. |
 
 ## Payment Design
 

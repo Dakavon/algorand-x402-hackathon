@@ -47,7 +47,7 @@ and `docs/` add hackathon context, strategy, and a task distillation the repo do
   battery sim, dynamic pricing, SQLite. Mock fallback for laptop-only dev.
 - **x402 Server:** Laptop — TypeScript/Hono (:4021). Custom x402 handler wraps `/energy/buy`.
 - **Consumer Agent:** Laptop — TypeScript (:4022). State machine buyer (IDLE→EVAL→PAY→CHARGING).
-- **Dashboard:** Laptop — Python/Streamlit (:8501). Gauges, charts, payment log w/ Lora links.
+- **Dashboard:** Laptop — React/Vite (:5173). Gauges, charts, payment log w/ Lora links.
 - **Payments:** x402 (`@x402/avm`, `@x402/fetch`, `@x402/hono`), GoPlausible facilitator,
   **USDC TestNet (ASA `10458941`)**; EURQ as a bonus add-on.
 - **Tooling:** AlgoKit / algokey, Lora explorer + faucet, Circle USDC faucet.
@@ -64,6 +64,8 @@ and `docs/` add hackathon context, strategy, and a task distillation the repo do
 | [docs/05-strategy-and-landscape.md](docs/05-strategy-and-landscape.md) | Prior winners, differentiation, demo & pitch strategy |
 | [docs/06-build-plan-and-tasks.md](docs/06-build-plan-and-tasks.md) | **Concrete architecture, constants, 6-phase task checklist** |
 | [docs/07-prephase-setup-and-mock-plan.md](docs/07-prephase-setup-and-mock-plan.md) | **Pre-phase: wallet setup, roles, verified SDK, local mock-payment milestone (share this)** |
+| [docs/backend-design-spec.md](docs/backend-design-spec.md) | Backend service contracts and dashboard API endpoints |
+| [docs/frontend-react-design-spec.md](docs/frontend-react-design-spec.md) | React dashboard ownership, layout, components, and data needs |
 | [docs/system-design.md](docs/system-design.md) | System architecture, payment flow, boundaries, future product shape |
 | [docs/team-operating-model.md](docs/team-operating-model.md) | 4-person ownership, capability cards, coordination cadence |
 | [docs/research-brief.md](docs/research-brief.md) | Assigned market, legal, and competitive research workstream |

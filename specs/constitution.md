@@ -68,15 +68,15 @@ Demo-friendly simulation: `ACCEL=60` compresses 1 hour into 1 minute. Battery ch
 | Producer (Pi) | Python only | FastAPI |
 | x402 Server (Laptop) | TypeScript | Hono |
 | Consumer Agent (Laptop) | TypeScript | Hono + @x402/fetch |
-| Dashboard (Laptop) | Python | Streamlit |
+| Dashboard (Laptop) | TypeScript | React/Vite |
 
-No mixing. Python on Pi for GPIO libraries. TypeScript for x402 SDK.
+No mixing. Python on Pi for GPIO libraries. TypeScript for x402 SDK and the React dashboard.
 
 ### Network
 
 - Wired Ethernet between Pi and Laptop — no venue WiFi dependency
 - Static IP or mDNS (`raspberrypi.local`)
-- Ports: Pi=8001, Hono=4021, Agent=4022, Dashboard=8501
+- Ports: Pi=8001, Hono=4021, Agent=4022, Dashboard=5173
 
 ### Data Flow
 
@@ -90,7 +90,7 @@ Potentiometer -> ADC -> Pi (/status)
                    Consumer Agent (state machine)
                           |
                           v (polled 2s)
-                   Streamlit Dashboard
+                    React Dashboard
 ```
 
 ### Energy Flow
@@ -188,7 +188,7 @@ Transitions:
 8. **x402 payment** → USDC on Algorand Testnet → settled via facilitator → tx link in dashboard
 9. **Delivery completes** → agent buys again → multiple on-chain transactions visible
 
-## UI (Streamlit Dashboard)
+## UI (React Dashboard)
 
 - Solar output (kW) — real-time from potentiometer input
 - Battery level (%) — sawtooth: drops on purchase, recovers from solar
@@ -206,7 +206,7 @@ src/
   server/             # TypeScript Hono x402 server
   consumer/
     agent/            # TypeScript x402 client
-    dashboard/        # Python Streamlit
+    dashboard/        # React/Vite dashboard
 specs/
   constitution.md     # This file
   features/           # Feature specifications
