@@ -25,11 +25,15 @@ except (ImportError, OSError):
     _HAS_ADC = False
     _spi = None
 
+LED_PIN = 27
+CHARGING_LED_SECONDS = float(os.getenv("CHARGING_LED_SECONDS", "5"))
+
 try:
     import RPi.GPIO as GPIO
 
     GPIO.setmode(GPIO.BCM)
     GPIO.setup(17, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+    GPIO.setup(LED_PIN, GPIO.OUT, initial=GPIO.LOW)
     _HAS_GPIO = True
     atexit.register(GPIO.cleanup)
 except (ImportError, RuntimeError):
@@ -62,6 +66,7 @@ class ProducerRuntime:
         self.battery_kwh = BATTERY_INITIAL_KWH
         self.ev_plugged = EV_PLUGGED_DEFAULT
         self.solar_kw = 2.0
+        self._charging_until = 0.0
 
     def _read_adc(self, channel: int = 0) -> int:
         if not _HAS_ADC:
@@ -98,12 +103,23 @@ class ProducerRuntime:
             return not self.ev_plugged
         return self.ev_plugged
 
+    @staticmethod
+    def _set_led(on: bool) -> None:
+        if _HAS_GPIO:
+            GPIO.output(LED_PIN, GPIO.HIGH if on else GPIO.LOW)
+
+    def _update_led(self) -> None:
+        now = time.time()
+        on = now < self._charging_until
+        self._set_led(on)
+
     def tick(self) -> dict[str, float | bool]:
         with self.lock:
             now = time.time()
             dt = max(0.05, now - self.last_tick_ts)
             self.last_tick_ts = now
 
+            self._update_led()
             self.solar_kw = self._solar_from_adc()
             self.ev_plugged = self._read_ev_gpio()
 
@@ -133,6 +149,8 @@ class ProducerRuntime:
                 raise ValueError("insufficient_battery")
             self.battery_kwh -= kwh
             self.battery_kwh = max(0.0, self.battery_kwh)
+            self._charging_until = max(self._charging_until, time.time() + CHARGING_LED_SECONDS)
+            self._set_led(True)
             battery_pct = 0.0 if BATTERY_CAPACITY_KWH == 0 else self.battery_kwh / BATTERY_CAPACITY_KWH
             return {
                 "battery_kwh": round(self.battery_kwh, 3),
