@@ -1,7 +1,7 @@
 # Legal Basis — §42c EnWG (German Energy Sharing)
 
-> ✅ **Verified 2026-06-06** against the official statute text plus German/English legal explainers
-> (sources at bottom). Supersedes the earlier unverified draft.
+> ✅ **Verified 2026-06-06** against the **verbatim** official statute text plus German/English legal
+> explainers (sources at bottom).
 >
 > **Official text:** https://www.gesetze-im-internet.de/enwg_2005/__42c.html
 
@@ -9,82 +9,88 @@
 
 **§42c EnWG — "Gemeinsame Nutzung elektrischer Energie aus Anlagen zur Erzeugung von Elektrizität
 aus erneuerbaren Energien"** = *Joint use of electrical energy from renewable generation
-facilities.* Added to the EnWG (Energiewirtschaftsgesetz) by the 2026 reform.
+facilities.*
 
-## ⚠️ The single most important nuance (read this)
+## Can a household sell energy from its battery to neighbors? — YES, with conditions
 
-**§42c is "joint use / sharing" (gemeinsame Nutzung), NOT a free peer-to-peer electricity sale
-market.** Precisely:
+This is the key question. The statute explicitly permits it:
 
-- Shared renewable electricity **supplements** each participant's existing residual supply
-  (Reststrom); **participants keep their existing energy supplier** — sharing does not replace it.
-- It is a regulated community arrangement with **two mandatory contracts** and **15-minute interval
-  metering**, not an ad-hoc spot trade.
-- So the team's one-liner — *"households sell surplus solar directly to neighbors"* — is a
-  **simplification**. There *is* a payment dimension (the joint-use contract must define
-  remuneration/Entgelt + an allocation key), but it is not an open P2P market price.
+- **Storage is in scope.** Absatz 1 Satz 1 names *"der Betreiber … einer Energiespeicheranlage, in
+  der **ausschließlich aus erneuerbaren Energien** stammende Elektrizität zwischengespeichert
+  wird"* — i.e. the operator of a **battery that stores only renewable electricity** may jointly use
+  it with other final consumers. (Storage must also meet §19 Abs. 3b EEG.)
+- **Per-kWh payment is explicitly allowed.** Absatz 3 Nr. 3 says the joint-use contract states
+  *"ob eine **entgeltliche Gegenleistung** … an den Betreiber zu leisten ist sowie … deren **Höhe in
+  Cent pro Kilowattstunde**."* So a payment to the operator **priced in ct/kWh** is exactly what
+  the law anticipates — that is *our build's model*.
+- **It runs as a supply relationship.** Absatz 1 Nr. 2: *"die Belieferung erfolgt durch den
+  Betreiber … auf der Grundlage eines **Liefervertrages**"* (delivery via the public grid under a
+  **supply contract**), plus Nr. 3: a separate **joint-use contract** (Vertrag zur gemeinsamen
+  Nutzung).
 
-➡️ See **"How to frame the project honestly"** below — this is fixable and our build still maps on.
+➡️ So "selling surplus from your renewable-charged battery to neighbors, paid per kWh" is **within
+§42c** — provided the conditions below hold. (My earlier note that said "not a sale / participants
+don't sell power" was **wrong** — there *is* an explicit per-kWh `entgeltliche Gegenleistung`.)
 
-## Verified facts
+## The real constraints (what actually limits you)
 
-### In-force dates (phased)
-- **1 June 2026** — energy sharing within a **single distribution system operator's balancing area**
-  (Bilanzierungsgebiet).
-- **1 June 2028** — extended to **adjacent balancing areas within the same control zone** (Regelzone).
+1. **Renewable-only storage.** The battery must store **exclusively** renewable electricity
+   (Absatz 1 Satz 1 + §19 Abs. 3b EEG). A battery that also charges from the grid/fossil does **not**
+   qualify.
+2. **Not predominantly commercial.** Absatz 1 Nr. 5: operating the facility *"dient weder überwiegend
+   der gewerblichen noch überwiegend der selbständigen beruflichen Tätigkeit"* — you may be paid, but
+   you **can't run it as your predominant commercial energy business**. This is citizen/prosumer
+   energy, not a for-profit energy-trading operation.
+3. **Same balancing area.** Absatz 4: from **1 June 2026** within one distribution operator's
+   **Bilanzierungsgebiet**; from **1 June 2028** also a directly adjacent balancing area in the same
+   control zone. Buyer and seller must share that grid area.
+4. **Supplements, doesn't replace.** The shared energy is supplied alongside each participant's
+   normal residual supply; they keep their main supplier for the rest (practical structure confirmed
+   by legal explainers). It is **not** an open, anyone-to-anyone P2P spot market.
+5. **15-minute interval metering** of both generated/stored and consumed electricity is mandatory
+   (Zählerstandsgangmessung / viertelstündliche registrierende Leistungsmessung, §2 S.1 Nr.27 MsbG).
+6. **Two mandatory contracts** (Absatz 1 Nr. 2–3): the **Liefervertrag** + the **joint-use contract**,
+   the latter defining the **allocation key** and the **ct/kWh remuneration** (Absatz 3).
 
-### Who may participate
-- **Final consumers (Letztverbraucher)** as facility *users*: natural persons, micro-/small &
-  medium enterprises (SMEs per EU def.), municipalities / public-law entities.
-- **Facility operator:** a natural person, partnership, or private-law entity whose members are all
-  final consumers or public-law entities; operation must **not predominantly serve a commercial
-  activity**.
+## Who may participate
 
-### Spatial scope — Bilanzierungsgebiet (balancing area)
-All participating units (generation + consumption points) must sit in the **same balancing area**
-of one distribution network operator. A Bilanzierungsgebiet is normally the grid area of a
-distribution network operator, assigned a unique ID by the responsible transmission operator.
-(From 2028: adjacent balancing areas in the same control zone.) Use of the public grid is allowed.
+- **Final consumers (Letztverbraucher)** as users: natural persons, micro-/SMEs, municipalities /
+  public-law entities.
+- **Operator:** a natural person / partnership / private-law entity whose members are all final
+  consumers or public-law entities, subject to the non-commercial limit (Nr. 5 above).
 
-### Generation source
-**Renewable only.** Storage facilities qualify only if charged **exclusively** with renewable
-electricity. Fossil generation is excluded.
+## In-force dates
 
-### Contractual structure (two separate contracts — mandatory)
-1. **Supply contract** (Energieliefervertrag) — facility operator → final consumer.
-2. **Joint-use contract** (Vertrag über die gemeinsame Nutzung) — must define: **allocation of the
-   generated quantities, assignment to each participant, and remuneration/Entgelt structure.**
+- **1 June 2026** — within a single distribution **Bilanzierungsgebiet**.
+- **1 June 2028** — extended to a directly adjacent balancing area in the same control zone.
 
-### Metering
-Both the **generated/stored** electricity and the **consumed** electricity at each supply point must
-be measured by **interval metering at 15-minute resolution** (Zählerstandsgangmessung /
-viertelstündliche registrierende Leistungsmessung, per §2 S.1 Nr.27 Messstellenbetriebsgesetz).
+## Capacity limits (confirm exact applicability)
 
-### Capacity limits (confirm exact applicability)
-The statute (Absatz 7) appears to reference thresholds of **30 kW** (single-household operator) and
-**100 kW** (multi-unit building). One English explainer did not surface these, so treat the *exact
-scope* of these limits as **to-confirm against the full Absatz 7 text** before quoting in the pitch.
+Secondary sources differ: the gesetze-im-internet extract referenced **30 kW** (single household) /
+**100 kW** (multi-unit building) thresholds (Absatz 7), while one English explainer did not surface
+them. Treat the **exact scope** of these limits as *to-confirm against the full Absatz 7 text*
+before quoting in the pitch.
 
-## How to frame the project honestly (for judges who know the law)
+## How to frame the project (accurate AND strong)
 
-Our agentic layer maps onto §42c **without overclaiming**, if framed as the **automation +
-settlement layer for the joint-use contract's remuneration**:
+The law explicitly contemplates a **ct/kWh `entgeltliche Gegenleistung`** to the battery/PV operator,
+defined in the **joint-use contract**, with **15-min metering** — but says **nothing about how a
+community computes, agrees, and settles** that payment. Today it's manual and clunky (idea.md's own
+"Problem"). **That gap is our product.**
 
-- §42c *requires* a joint-use contract with an **allocation key** and a **remuneration (Entgelt)**
-  arrangement, plus **15-min metering** — but says nothing about *how* communities compute, agree,
-  and settle that remuneration. Today that's manual/clunky (idea.md's own "Problem" section).
-- **Our agents automate exactly that gap:** the producer agent prices surplus dynamically per the
-  community's allocation logic; the consumer agent decides and **settles the remuneration instantly
-  via x402 on Algorand**, per metered interval. That is squarely within §42c's framework.
+**Pitch wording:** "§42c lets households share — and be paid in cents per kWh — for renewable
+electricity with neighbors in their grid area. It mandates a price and 15-minute metering but leaves
+the *pricing, agreement, and settlement* manual. Our agents do exactly that: the producer prices
+surplus dynamically, the consumer (EV) decides and **settles the per-kWh remuneration instantly via
+x402 on Algorand**, metered per interval."
 
-**Safer pitch wording:** "§42c legalized neighbor-to-neighbor energy sharing — but the law leaves
-the *settlement and automation* of the shared-energy remuneration unsolved. We built the agentic
-layer that prices, meters, and settles it instantly on-chain." (Avoid "free P2P energy market" /
-"replace your utility" — both are inaccurate under §42c.)
+- ✅ Accurate to say: "paid per kWh," "energy sharing," "within your balancing area," "renewable-only."
+- ⚠️ Avoid: "open P2P energy market," "replace your utility," "trade with anyone anywhere," or
+  positioning the household as a commercial energy trader.
 
-> For the hackathon demo it is fine to **simplify to a direct buyer↔seller flow** as a *vision of
-> where this goes* — just don't assert it's literally what §42c permits today. The 15-min metering
-> interval even lines up nicely with our per-interval purchase model.
+> Demo note: simplifying to a direct buyer↔seller flow is fine as the *vision*; just present it as
+> automating §42c's remuneration, not as something beyond what §42c permits. The 15-min metering
+> interval even maps onto our per-interval purchase model.
 
 ## Sources
 

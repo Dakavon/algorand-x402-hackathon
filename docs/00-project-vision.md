@@ -6,11 +6,13 @@ With **§42c EnWG** (German Energy Sharing law, in force **1 June 2026**), house
 surplus (solar) electricity with neighbors in the same balancing area. Today this is human-driven
 and slow.
 
-> ⚖️ **Legal accuracy:** §42c is *joint use / sharing* (with a regulated remuneration arrangement),
-> **not** a free P2P sale market — and it *supplements* rather than replaces your existing supplier.
-> The "sell directly to your neighbor" tagline is a simplification; pitch our agents as the
-> **automation + on-chain settlement layer for the sharing remuneration**. Full detail +
-> safe pitch wording in [04-law-42c-enwg.md](04-law-42c-enwg.md).
+> ⚖️ **Legal accuracy:** §42c *does* let you be **paid per kWh** (`entgeltliche Gegenleistung … in
+> Cent pro Kilowattstunde`, Abs. 3 Nr. 3) for renewable electricity — **including from a battery that
+> stores only renewable energy** (Abs. 1 S. 1). The real limits: same balancing area, renewable-only,
+> operator **not predominantly commercial**, supplements (not replaces) your supplier, 15-min
+> metering. It's regulated *energy sharing*, not an open P2P market. Pitch our agents as the
+> **automation + on-chain settlement of §42c's per-kWh remuneration**. Full detail + safe pitch
+> wording in [04-law-42c-enwg.md](04-law-42c-enwg.md).
 
 **Vision:** Fully autonomous, agent-driven energy trading between households.
 No intermediary, no utility middleman, no manual coordination.
