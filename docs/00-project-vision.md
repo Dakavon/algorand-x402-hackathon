@@ -63,7 +63,7 @@ producer** (no discovery / no multi-neighbor comparison) — see MVP scope below
 
 ## MVP scope (what to actually build in 36h)
 
-> Full task breakdown in [06-build-plan-and-tasks.md](06-build-plan-and-tasks.md). The demo is
+> Full implementation breakdown in [../specs/plan.md](../specs/plan.md). The demo is
 > **physical and interactive**: one Producer (Raspberry Pi + potentiometer "sun" + jumper
 > "EV plug") and one autonomous Consumer Agent on a laptop.
 
@@ -93,7 +93,8 @@ producer** (no discovery / no multi-neighbor comparison) — see MVP scope below
 
 ## Build order (de-risk first)
 
-Follow the 6 phases in [06-build-plan-and-tasks.md](06-build-plan-and-tasks.md):
+Follow Phase 0 in [07-prephase-setup-and-mock-plan.md](07-prephase-setup-and-mock-plan.md), then
+the implementation phases in [../specs/plan.md](../specs/plan.md):
 1. **Phase 1** — generate + fund two TestNet accounts, opt into USDC, `.env` files.
 2. **First milestone:** agent buys 1 kWh from the server with a **real settled USDC tx** — in
    laptop **mock mode** (no Pi needed). This is the minimum viable demo; everything layers on it.
@@ -102,7 +103,7 @@ Follow the 6 phases in [06-build-plan-and-tasks.md](06-build-plan-and-tasks.md):
 5. Add **one** bonus-track / "serious" feature (EURQ or ARC-58 spend cap) for differentiation.
 6. **Phase 6 + last 4–5 hours** — integration, 3× clean dry runs, backup recording, pitch rehearsal.
 
-## Resolved decisions (from plan.md)
+## Resolved decisions (from specs/plan.md)
 
 - **Unit of sale:** per kWh. Buyer specifies kWh per request (`GET /energy/buy?kwh=1`).
 - **Payment cadence:** pay-per-purchase — settle one x402 payment per buy; re-buy after delivery.

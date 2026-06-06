@@ -26,7 +26,7 @@ The dashboard is read-only. It never stores wallet mnemonics, never signs paymen
 ## Suggested Directory
 
 ```txt
-consumer/dashboard/
+src/frontend/
 ├── src/
 │   ├── api/client.ts
 │   ├── components/
