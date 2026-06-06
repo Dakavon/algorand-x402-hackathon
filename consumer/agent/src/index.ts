@@ -159,16 +159,36 @@ async function buyEnergy(kwh: number): Promise<BuyResponse> {
 
   const settle = paymentInspector.getPaymentSettleResponse(name => response.headers.get(name));
   const settleRecord = settle as Record<string, unknown> | null;
+  // Prefer the REAL on-chain settlement tx (the server no longer fabricates one).
   const txId =
-    body.tx_id ??
     (settleRecord?.["transaction"] as string | undefined) ??
     (settleRecord?.["txId"] as string | undefined) ??
-    (settleRecord?.["txID"] as string | undefined);
+    (settleRecord?.["txID"] as string | undefined) ??
+    body.tx_id;
 
   return {
     ...body,
-    ...(txId ? { tx_id: txId } : {}),
+    ...(txId
+      ? { tx_id: txId, lora_url: `https://lora.algokit.io/testnet/tx/${txId}` }
+      : {}),
   };
+}
+
+async function reportPaymentToServer(result: BuyResponse): Promise<void> {
+  try {
+    await fetch(`${resourceServerUrl}/report-payment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kwh: result.granted_kwh,
+        price_paid_usdc: result.price_paid_usdc,
+        tx_id: result.tx_id,
+        lora_url: result.lora_url,
+      }),
+    });
+  } catch {
+    // Non-fatal: the agent's own /events still carries the real tx.
+  }
 }
 
 async function initPaymentClient(): Promise<void> {
@@ -269,6 +289,10 @@ async function agentLoop(): Promise<void> {
       ...(result.tx_id ? { tx_id: result.tx_id } : {}),
       ...(result.lora_url ? { lora_url: result.lora_url } : {}),
     });
+
+    if (result.tx_id) {
+      void reportPaymentToServer(result);
+    }
 
     setState("CHARGING", `Delivery started (${currentState.delivery_remaining_kwh.toFixed(2)} kWh pending)`);
   } catch (error) {

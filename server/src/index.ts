@@ -305,6 +305,38 @@ app.get("/api/events", async c => {
 
 app.get("/api/payments", c => c.json(readPaymentsLog()));
 
+// The buyer reports a settled payment (with the REAL on-chain tx) so the ledger
+// and dashboard show genuine, clickable Lora links.
+app.post("/report-payment", async c => {
+  const body = (await c.req.json().catch(() => null)) as Partial<PaymentRow> | null;
+  if (
+    !body ||
+    typeof body.kwh !== "number" ||
+    typeof body.price_paid_usdc !== "number" ||
+    !body.tx_id
+  ) {
+    return c.json(apiError("INTERNAL_ERROR", "invalid payment report", false), 400);
+  }
+  const row: PaymentRow = {
+    ts: nowSeconds(),
+    kwh: body.kwh,
+    price_paid_usdc: body.price_paid_usdc,
+    tx_id: body.tx_id,
+    ...(body.lora_url ? { lora_url: body.lora_url } : {}),
+  };
+  appendPayment(row);
+  addEvent({
+    ts: row.ts,
+    type: "PAYMENT",
+    message: `Paid ${row.price_paid_usdc.toFixed(2)} USDC for ${row.kwh.toFixed(2)} kWh`,
+    kwh: row.kwh,
+    price_usdc: row.price_paid_usdc,
+    tx_id: row.tx_id,
+    ...(row.lora_url ? { lora_url: row.lora_url } : {}),
+  });
+  return c.json({ ok: true });
+});
+
 // Paywalled: buying energy requires an x402 payment.
 app.use(
   paymentMiddleware(
@@ -332,7 +364,6 @@ app.get("/energy/buy", async c => {
 
   const unitPrice = producerCache.price_per_kwh || Number(pricePerKwhUsd);
   const pricePaidUsdc = Number((requestedKwh * unitPrice).toFixed(6));
-  const fakeTx = `local-${Date.now().toString(36)}`;
 
   if (producerHealth() === "ok") {
     try {
@@ -342,35 +373,17 @@ app.get("/energy/buy", async c => {
         body: JSON.stringify({ kwh: requestedKwh }),
       });
     } catch {
-      // Keep serving Phase-0 style while producer is unavailable.
+      // Producer unavailable — still grant; battery sync catches up on next poll.
     }
   }
 
-  const paymentRow: PaymentRow = {
-    ts: nowSeconds(),
-    kwh: requestedKwh,
-    price_paid_usdc: pricePaidUsdc,
-    tx_id: fakeTx,
-    ...(fakeTx ? { lora_url: `https://lora.algokit.io/testnet/tx/${fakeTx}` } : {}),
-  };
-  appendPayment(paymentRow);
-
-  addEvent({
-    ts: nowSeconds(),
-    type: "PAYMENT",
-    message: `Paid ${pricePaidUsdc.toFixed(2)} USDC for ${requestedKwh.toFixed(2)} kWh`,
-    kwh: requestedKwh,
-    price_usdc: pricePaidUsdc,
-    tx_id: paymentRow.tx_id,
-    ...(paymentRow.lora_url ? { lora_url: paymentRow.lora_url } : {}),
-  });
-
+  // The REAL on-chain tx id is known to the buyer (from the x402 settle response),
+  // not here. The agent reports it via POST /report-payment, which is the source
+  // of truth for the ledger + Lora links. We deliberately do NOT fabricate a tx.
   return c.json({
     granted_kwh: requestedKwh,
     price_paid_usdc: pricePaidUsdc,
-    tx_id: paymentRow.tx_id,
     timestamp: new Date().toISOString(),
-    lora_url: paymentRow.lora_url,
   });
 });
 
