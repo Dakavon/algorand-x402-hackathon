@@ -1,0 +1,70 @@
+# P2P Agentic Energy Sharing ⚡️🤖
+
+> Autonomous, agent-driven energy trading between households — no intermediary.
+> Built for the **Algorand Builders Berlin — Agentic Commerce x402 Hackathon** (June 6–7, 2026, @ 42 Berlin).
+
+This file is the entry point for any developer or AI agent working in this repo.
+Read the docs in `docs/` for full context before building.
+
+---
+
+## One-liner
+
+Your EV autonomously buys cheap surplus solar from your neighbor, pays instantly via
+**x402 on Algorand**, and charges — while you sleep. Grounded in Germany's new
+**§42c EnWG** energy-sharing law (in force 06/2026).
+
+## Team
+
+5 people. At least **one member must be fully on-site** to present the final pitch.
+⚠️ Note: the build plan in the repo (`plan.md`) was written for **2 people** — see
+[docs/06-build-plan-and-tasks.md](docs/06-build-plan-and-tasks.md) for how to deploy the other 3.
+
+## Source of truth
+
+This working dir **is** the team repo `Dakavon/algorand-x402-hackathon` (`origin` → GitHub, branch
+`main`). The authoritative plan lives at the repo root: `idea.md` and `plan.md`. Our `CLAUDE.md`
+and `docs/` add hackathon context, strategy, and a task distillation the repo doesn't have.
+
+## Mandatory constraints (to qualify for prizes)
+
+- Must implement **x402 on Algorand**.
+- Must fit the **"Agentic Commerce"** theme.
+- **New project**: all code written *during* the hackathon (ideation beforehand is fine).
+- Submit project + presentation **before 13:00 on June 7, 2026**.
+
+## Target tracks
+
+- **Primary:** Track 1 — Agentic Commerce ($11,000). (Agents transacting over x402.)
+- **Bonus (opportunistic):** Quantoz EURQ (regulated digital euro — strong German narrative),
+  Folks Finance xALGO (idle-treasury yield), Alpha Arcade (prediction markets for
+  "buy tomorrow's solar today").
+
+## Stack (decided — see plan.md)
+
+- **Producer:** Raspberry Pi 4 — Python/FastAPI (:8001). Potentiometer→ADC = solar, GPIO = "EV plugged",
+  battery sim, dynamic pricing, SQLite. Mock fallback for laptop-only dev.
+- **x402 Server:** Laptop — TypeScript/Hono (:4021). Custom x402 handler wraps `/energy/buy`.
+- **Consumer Agent:** Laptop — TypeScript (:4022). State machine buyer (IDLE→EVAL→PAY→CHARGING).
+- **Dashboard:** Laptop — Python/Streamlit (:8501). Gauges, charts, payment log w/ Lora links.
+- **Payments:** x402 (`@x402/avm`, `@x402/fetch`, `@x402/hono`), GoPlausible facilitator,
+  **USDC TestNet (ASA `10458941`)**; EURQ as a bonus add-on.
+- **Tooling:** AlgoKit / algokey, Lora explorer + faucet, Circle USDC faucet.
+
+## Docs index
+
+| File | What's in it |
+|---|---|
+| [docs/00-project-vision.md](docs/00-project-vision.md) | The idea, MVP, outlook, why it wins |
+| [docs/01-hackathon-rules.md](docs/01-hackathon-rules.md) | Rules, tracks, prizes, timeline, submission |
+| [docs/02-resources.md](docs/02-resources.md) | All official docs, SDKs, templates, tools, faucets |
+| [docs/03-x402-and-agentic-commerce.md](docs/03-x402-and-agentic-commerce.md) | x402 flow, agentic commerce concepts, Bazaar, ARCs, security |
+| [docs/04-law-42c-enwg.md](docs/04-law-42c-enwg.md) | The §42c EnWG legal basis (⚠️ verify against official text) |
+| [docs/05-strategy-and-landscape.md](docs/05-strategy-and-landscape.md) | Prior winners, differentiation, demo & pitch strategy |
+| [docs/06-build-plan-and-tasks.md](docs/06-build-plan-and-tasks.md) | **Concrete architecture, constants, 6-phase task checklist, 5-person split** |
+
+## Status
+
+Architecture & build plan locked (from team repo). No code written yet.
+**Next step:** Phase 1 — generate + fund two TestNet accounts, opt into USDC, create `.env` files.
+**First milestone:** one agent buys 1 kWh with a real settled USDC tx on TestNet (laptop mock mode).

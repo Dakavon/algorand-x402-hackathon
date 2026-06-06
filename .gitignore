@@ -1,0 +1,25 @@
+# Secrets — NEVER commit (these hold wallet mnemonics / addresses)
+.env
+.env.*
+!.env.template
+
+# Node / TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Runtime artifacts
+payments.jsonl
+*.sqlite
+*.sqlite3
+*.db
+
+# Tooling / local
+.claude/
+.DS_Store
