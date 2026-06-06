@@ -4,8 +4,8 @@
 > **Goal of this stage:** prove that **one real x402 payment settles on Algorand TestNet**, running
 > entirely on a laptop. Nothing else (hardware, dashboard, pricing) matters until this works.
 >
-> This is "Phase 0" — it comes *before* the 6 build phases in
-> [06-build-plan-and-tasks.md](06-build-plan-and-tasks.md).
+> This is "Phase 0" — it comes *before* the implementation phases in
+> [../specs/plan.md](../specs/plan.md).
 
 ---
 
@@ -21,8 +21,8 @@ The system has **two Algorand accounts (wallets)**. Each is attached to one prog
 
 | Account (wallet) | Program / role | Holds | Why |
 |---|---|---|---|
-| **Seller** (neighbor's house / producer) | **The SERVER** (`server/`, Hono) — returns "402 Payment Required", *receives* money | only its **public address** | The server never signs a spend; it just says "pay to this address" |
-| **Buyer** (your EV / consumer) | **The CLIENT / agent** (`consumer/agent/`) — *pays* | the **25-word mnemonic** | Only the payer needs to sign the transaction |
+| **Seller** (neighbor's house / producer) | **The SERVER** (`src/x402/server/`, Hono) — returns "402 Payment Required", *receives* money | only its **public address** | The server never signs a spend; it just says "pay to this address" |
+| **Buyer** (your EV / consumer) | **The CLIENT / agent** (`src/x402/client/`) — *pays* | the **25-word mnemonic** | Only the payer needs to sign the transaction |
 
 **Key points everyone should internalise:**
 - x402 runs on plain HTTP: a **client** requests a URL → the **server** demands payment → client
@@ -64,13 +64,15 @@ The system has **two Algorand accounts (wallets)**. Each is attached to one prog
 
 ## 4. Verified SDK (x402 **v2.11.0**, from the official `algorandfoundation/x402-demo`)
 
-> NOTE: this **supersedes the API names guessed in `plan.md`/`idea.md`** (e.g. there is no custom
+> NOTE: this **supersedes API names guessed in early planning docs** (e.g. there is no custom
 > `verifyPayment()/settlePayment()` handler in the basic flow — the server uses `paymentMiddleware`).
 
 - **Server packages:** `@x402/hono`, `@x402/core`, `@x402/avm`, `hono`, `@hono/node-server`, `dotenv`
 - **Client packages:** `@x402/fetch`, `@x402/avm`, `@x402/core`, `@algorandfoundation/algokit-utils`, `dotenv`
-- **Server env:** `AVM_ADDRESS` (seller address), `FACILITATOR_URL`, `PORT` (default 4021)
-- **Client env:** `AVM_MNEMONIC` (buyer 25-word phrase), `RESOURCE_SERVER_URL`, `ENDPOINT_PATH`
+- **Server env:** `SELLER_ADDRESS` (seller address), `FACILITATOR_URL`, `PORT` (default 4021)
+- **Client env:** `BUYER_MNEMONIC` (buyer 25-word phrase), `SERVER_URL`, `ENDPOINT_PATH`
+- Official examples may use `AVM_ADDRESS`, `AVM_MNEMONIC`, or `RESOURCE_SERVER_URL`; our repo
+  normalizes to `SELLER_ADDRESS`, `BUYER_MNEMONIC`, and `SERVER_URL`.
 - **Price format:** a string like `"$0.01"`. The facilitator maps `$` → TestNet USDC, so we likely
   don't even hardcode the asset id for the happy path.
 
@@ -83,17 +85,17 @@ The system has **two Algorand accounts (wallets)**. Each is attached to one prog
 1. **Create 2 TestNet accounts** — "Seller" and "Buyer-Agent".
    - Option A (visual): **Pera Wallet** (perawallet.app) or **Lute** web wallet → create both,
      save each 25-word passphrase.
-   - Option B (fastest, no app): run our `setup/` generate script (Node + `algosdk`, no AlgoKit
+   - Option B (fastest, no app): run a generate helper script (Node + `algosdk`, no AlgoKit
      install needed). *(To be written — see "What we'll build".)*
 2. **Fund ALGO (gas):** paste each address at `https://lora.algokit.io/testnet/fund`.
 3. **Opt in to USDC** (required before an account can receive USDC): add asset id `10458941` to each
-   account (Pera "Add asset", or our `setup/` opt-in script). *(Costs a tiny ALGO fee — fund first.)*
+   account (Pera "Add asset", or an opt-in helper script). *(Costs a tiny ALGO fee — fund first.)*
 4. **Fund USDC:** at `https://faucet.circle.com` (select Algorand Testnet), ~10 USDC to each address.
 5. **Verify** both accounts on `https://lora.algokit.io/testnet` (ALGO + USDC visible).
 
 **Outputs to capture (this is what unblocks coding):**
-- Seller **address** → safe to share; goes in `server/.env` as `AVM_ADDRESS`.
-- Buyer **25-word mnemonic** → ⚠️ **secret**; goes in `consumer/agent/.env` as `AVM_MNEMONIC`.
+- Seller **address** → safe to share; goes in `src/x402/server/.env` as `SELLER_ADDRESS`.
+- Buyer **25-word mnemonic** → ⚠️ **secret**; goes in `src/x402/client/.env` as `BUYER_MNEMONIC`.
   Do **not** paste it in chat/Slack — put it directly in the `.env`. (TestNet key = no real value,
   but keep the habit.)
 
@@ -102,7 +104,7 @@ The system has **two Algorand accounts (wallets)**. Each is attached to one prog
 | Step | What | Why |
 |---|---|---|
 | **0** | Run the **official demo's** Hono server + fetch client as-is, with our funded accounts. Get the sample resource back + a **settled tx on Lora**. | Proves SDK + facilitator + wallets all work, isolated from our code. **This is the real first milestone.** |
-| **1** | Fork the demo into **our** `server/` (route `GET /energy/buy`, returns `{granted_kwh, price_paid, tx_id}`, fixed price) + **our** one-shot `consumer/agent/`. | Our names, still simplest possible. |
+| **1** | Fork the demo into **our** `src/x402/server/` (route `GET /energy/buy`, returns `{granted_kwh, price_paid, tx_id}`, fixed price) + **our** one-shot `src/x402/client/`. | Our names, still simplest possible. |
 | **2** | Add mock "producer state" (solar/battery/price in memory — the Pi's job, faked on laptop), the **pricing formula**, and the agent **state machine** (IDLE→EVAL→PAY→CHARGING) + budget cap + re-buy. | Makes it *agentic & dynamic*, still no hardware. |
 
 **Known technical risk (flagged early):** the demo prices payments **statically** in
@@ -116,15 +118,15 @@ After Step 2 works on the laptop → move the producer onto the **Raspberry Pi**
 
 ## 6. What we'll build for this stage (so the team knows the deliverables)
 
-- `setup/` — `generate` + `optin` helper scripts (Node/`algosdk`) so account creation is one command.
-- `server/` — minimal Hono x402 server (from the verified v2.11.0 pattern) + `.env.template`.
-- `consumer/agent/` — minimal x402 client/agent + `.env.template`.
+- Optional setup helpers — `generate` + `optin` scripts (Node/`algosdk`) if account creation needs automation.
+- `src/x402/server/` — minimal Hono x402 server (from the verified v2.11.0 pattern) + `.env.template`.
+- `src/x402/client/` — minimal x402 client/agent + `.env.template`.
 - Short `RUN.md` — exact commands to reproduce the settled payment.
 
 ## 7. Definition of done (Phase 0)
 
 - ✅ Two funded TestNet accounts (ALGO + USDC), both opted into USDC.
-- ✅ Running our `server/` + `consumer/agent/` on the laptop produces a **real USDC payment from
+- ✅ Running our `src/x402/server/` + `src/x402/client/` on the laptop produces a **real USDC payment from
   Buyer → Seller**, settled on TestNet.
 - ✅ The transaction is **viewable on the Lora explorer** (this link is the demo proof).
 
@@ -132,7 +134,7 @@ After Step 2 works on the laptop → move the producer onto the **Raspberry Pi**
 
 - **1 person:** create + fund + opt-in the 2 wallets (§5a), share the seller address, put the buyer
   mnemonic in `.env`.
-- **1 person (+ AI):** scaffold `setup/`, `server/`, `consumer/agent/` and run Steps 0–1.
+- **1 person (+ AI):** scaffold `src/x402/server/`, `src/x402/client/`, and any needed setup helpers, then run Steps 0–1.
 - **Everyone else:** read this doc + skim the official demo (`algorandfoundation/x402-demo`,
   `x402-examples/server/hono` and `x402-examples/client/fetch`) so we share the same mental model
   before we parallelise into the 6 build phases.

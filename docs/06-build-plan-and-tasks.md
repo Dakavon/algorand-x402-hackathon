@@ -1,8 +1,7 @@
 # Build Plan & Tasks (from the team repo)
 
-> **Source of truth:** the team repo `Dakavon/algorand-x402-hackathon` — this working dir is its
-> `main` branch. Full detail at the repo root: `idea.md` and `plan.md`. This doc distills the
-> **actionable tasks** and adapts the work split for our **team of 4** (the original plan was for 2).
+> **Implementation authority:** use `specs/*`, especially [../specs/plan.md](../specs/plan.md).
+> This doc is a historical/task distillation for quick lookup.
 
 ---
 
@@ -41,27 +40,20 @@ Potentiometer/GPIO → Pi FastAPI (:8001) → Hono x402 server (:4021) → Consu
 
 ```
 algorand/                      # the project root (team repo)
-├── producer/                  # Pi — Python
-│   ├── main.py                # FastAPI: GPIO, battery sim, pricing, SQLite
-│   ├── requirements.txt       # fastapi, uvicorn, spidev, gpiozero, RPi.GPIO
-│   └── .env.template          # ACCEL=60
-├── server/                    # Laptop — TypeScript
-│   ├── src/index.ts           # Hono app, custom x402 handler, Pi poller, JSONL
-│   ├── .env.template          # SELLER_ADDRESS, FACILITATOR_URL, PI_URL
-│   ├── package.json
-│   └── tsconfig.json
-├── consumer/
-│   ├── agent/                 # Laptop — TypeScript
-│   │   ├── src/index.ts       # x402 client, state machine, delivery tracking
-│   │   ├── .env.template      # BUYER_MNEMONIC, SERVER_URL, BUDGET_USD
-│   │   ├── package.json
-│   │   └── tsconfig.json
-│   └── dashboard/             # Laptop — React/Vite
-│       ├── src/               # React components, hooks, API client
-│       ├── package.json
-│       └── vite.config.ts
-├── idea.md
-└── plan.md
+├── src/
+│   ├── raspberrypi/           # Pi — Python/FastAPI producer
+│   ├── x402/
+│   │   ├── server/            # Laptop — TypeScript/Hono x402 resource server
+│   │   └── client/            # Laptop — TypeScript x402 consumer agent
+│   └── frontend/              # Laptop — React/Vite dashboard
+├── specs/                     # implementation authority
+│   ├── constitution.md
+│   ├── plan.md
+│   ├── backend-design-spec.md
+│   ├── frontend-react-design-spec.md
+│   └── system-design.md
+├── docs/                      # lookup/reference; doc 07 is Phase 0 authority
+└── idea.md
 ```
 
 ---
@@ -95,9 +87,9 @@ algorand/                      # the project root (team repo)
 > - **Env:** server `AVM_ADDRESS`, `FACILITATOR_URL`, `PORT`; agent `AVM_MNEMONIC`, `RESOURCE_SERVER_URL`, `ENDPOINT_PATH`.
 
 **.env files (never commit):**
-- `server/.env`: `SELLER_ADDRESS`, `FACILITATOR_URL=https://facilitator.goplausible.xyz`, `PI_URL=http://raspberrypi.local:8001`
-- `consumer/agent/.env`: `BUYER_MNEMONIC`, `SERVER_URL=http://localhost:4021`, `BUDGET_USD=5.00`
-- `producer/.env`: `ACCEL=60`
+- `src/x402/server/.env`: `SELLER_ADDRESS`, `FACILITATOR_URL=https://facilitator.goplausible.xyz`, `PI_URL=http://raspberrypi.local:8001`
+- `src/x402/client/.env`: `BUYER_MNEMONIC`, `SERVER_URL=http://localhost:4021`, `BUDGET_USD=5.00`
+- `src/raspberrypi/.env`: `ACCEL=60`
 
 ---
 
@@ -136,8 +128,7 @@ when `<= 0`, agent may buy again.
 
 ## Build phases (task checklist)
 
-> Time estimates are from the 2-person plan. With 4 people, several phases overlap — see
-> "Team of 4 adaptation" below and [team-operating-model.md](team-operating-model.md).
+> Time estimates are rough. Several phases can overlap once the payment rail is proven.
 
 ### Phase 1 — Accounts & Testnet setup (~1h, together)
 - [ ] **Owner: B, support: N.** Generate two keypairs (`algokey generate`): seller (producer) + buyer (consumer).
@@ -158,10 +149,10 @@ when `<= 0`, agent may buy again.
 
 ### Phase 3 — Hono x402 server (TS/laptop, ~5h) — can dev against mock Pi
 - [ ] **Owner: N, support: B.** Hono on :4021. Background poller fetches Pi `/status` every 2s (caches last-known).
-- [ ] **Owner: N, support: B.** `GET /status` (free, cached). `GET /energy/buy?kwh=X` behind **custom x402 handler** (not middleware).
+- [ ] **Owner: N, support: B.** `GET /status` (free, cached). `GET /energy/buy?kwh=X` behind x402. Phase 0 uses the official demo/payment-middleware path first; dynamic pricing follows after one settled payment works.
 - [ ] **Owner: N, support: B.** Buy handler: parse kwh (default 1, max = battery); `total = kwh * price_per_kwh`.
 - [ ] **Owner: N, support: B.** No `X-PAYMENT` → return **402** with requirements (`scheme: exact`, network CAIP-2, `payTo: SELLER_ADDRESS`, `extra.asset: 10458941`).
-- [ ] **Owner: N, support: B.** With `X-PAYMENT` → `verifyPayment()` then `settlePayment()` → on success `POST` Pi `/consume {kwh}`.
+- [ ] **Owner: N, support: B.** With `X-PAYMENT` → verify and settle through the chosen x402 SDK/facilitator path → on success `POST` Pi `/consume {kwh}`.
 - [ ] **Owner: N, support: B.** Handle Pi 409 (refund/error). Append to `payments.jsonl`. Return 200 `{granted_kwh, price_paid, tx_id, timestamp, new_battery_kwh}`.
 - **Done when:** `/status` cached data; `/energy/buy` returns 402 then settles+consumes+logs on valid payment.
 
@@ -176,7 +167,7 @@ when `<= 0`, agent may buy again.
 
 ### Phase 5 — React dashboard (laptop, ~4h) — needs 2/3/4
 - [ ] **Owner: S, support: B.** React/Vite dashboard on :5173 with auto-refresh (~2s) against Hono `/api/*` endpoints.
-- [ ] **Owner: S, support: B.** Build against mocked JSON first; confirm contracts in [backend-design-spec.md](backend-design-spec.md) and [frontend-react-design-spec.md](frontend-react-design-spec.md).
+- [ ] **Owner: S, support: B.** Build against mocked JSON first; confirm contracts in [../specs/backend-design-spec.md](../specs/backend-design-spec.md) and [../specs/frontend-react-design-spec.md](../specs/frontend-react-design-spec.md).
 - [ ] **Owner: S, support: N.** Time-series charts for solar, battery sawtooth, and price from `/api/history`.
 - [ ] **Owner: S, support: J.** Agent state, decision reason, delivery countdown, and EV flow indicator from `/api/snapshot` and `/api/events`.
 - [ ] **Owner: S, support: B.** Payment ledger with settled USDC tx IDs and **clickable Lora explorer links**.
@@ -205,11 +196,10 @@ when `<= 0`, agent may buy again.
 
 ---
 
-## Team of 4 adaptation
+## Workstream adaptation
 
-The repo's original split is 2 people (**Person A = Pi/Python**, **Person B = Laptop/TS+dashboard**).
-The current team has 4 people. Keep the core critical path narrow and use the operating model in
-[docs/team-operating-model.md](team-operating-model.md) for current ownership.
+Keep the core critical path narrow and use the operating model in
+[team-operating-model.md](team-operating-model.md) for current ownership.
 
 | Area | Owner | Support | Notes |
 |---|---|---|---|

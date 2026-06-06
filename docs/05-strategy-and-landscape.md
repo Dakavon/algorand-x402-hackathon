@@ -91,7 +91,7 @@ From the official ideas doc, our project demonstrates several listed items at on
 | Payments don't settle live on stage | Pre-fund wallets; rehearse on TestNet; have a recorded fallback clip |
 | Legal overclaiming | Use the verified §42c framing in `docs/04-law-42c-enwg.md`; avoid open-market or utility-replacement claims |
 
-## Recommended team split (4 people)
+## Recommended work split
 
 | Area | Owner | Purpose |
 |---|---|---|

@@ -1,5 +1,9 @@
 # ⚡ Agentic Energy Sharing Marketplace (x402 + Algorand)
 
+> Product/pitch vision. For implementation details, follow `specs/*`. Use `docs/*` as lookup and
+> reference material, except `docs/07-prephase-setup-and-mock-plan.md` as the Phase 0 payment-rail
+> authority.
+
 ## 🧠 Problem
 
 With the introduction of §42c EnWG (Energy Sharing), households can be paid per kWh for sharing
@@ -75,7 +79,7 @@ Solar → Self-consumption → Storage → Paid sharing → Neighbor / EV
 
 ### x402 Server (Laptop — TypeScript)
 - **Hono** — polls Pi for state, wraps `/energy/buy` behind x402 paywall
-- Custom handler (not middleware) for dynamic pricing based on buyer-specified kWh
+- Start from the verified x402 payment flow; add dynamic pricing based on buyer-specified kWh after the payment rail is proven
 - Hosted facilitator at `facilitator.goplausible.xyz` (verifies + settles payments)
 - **USDC** on Algorand Testnet — Circle's official ASA `10458941`
 - JSONL payment log for persistence

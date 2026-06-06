@@ -95,7 +95,7 @@ With `X-PAYMENT` header:
 - Verify payment with the facilitator.
 - Settle payment on Algorand TestNet.
 - Call producer `POST /consume` after settlement succeeds.
-- Append a payment row to `server/payments.jsonl`.
+- Append a payment row to `src/x402/server/payments.jsonl`.
 - Return the granted result.
 
 Success response:
@@ -219,7 +219,7 @@ Returns up to 100 recent events. Event types should be `STATE`, `DECISION`, `PAY
 
 ## Environment
 
-Server `.env`:
+Server `src/x402/server/.env`:
 
 ```txt
 SELLER_ADDRESS=<seller_public_address>
@@ -228,7 +228,7 @@ PI_URL=http://raspberrypi.local:8001
 AGENT_URL=http://localhost:4022
 ```
 
-Agent `.env`:
+Agent `src/x402/client/.env`:
 
 ```txt
 BUYER_MNEMONIC=<buyer_25_word_mnemonic>

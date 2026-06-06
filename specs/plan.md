@@ -1,17 +1,17 @@
 # Build Plan — Agentic Energy Sharing Marketplace
 
-> 36 hours, 2 people, live in-person demo, Algorand/x402 prize track
+> Live in-person demo, Algorand/x402 prize track
 
 ## Architecture
 
 ```
 Raspberry Pi 4 (Python only :8001)       Laptop
 ┌────────────────────────────────┐      ┌──────────────────────────────────────┐
-│  FastAPI                       │      │  Hono Producer :4021 (TypeScript)    │
+│  FastAPI                       │      │  Hono x402 Server :4021 (TypeScript) │
 │  ├─ MCP3008 ADC → solar_kw    │      │  ├─ polls Pi /status every 2s        │
 │  ├─ GPIO pin → ev_plugged     │      │  ├─ GET /status (free, cached)       │
 │  ├─ Battery simulation        │      │  ├─ GET /energy/buy?kwh=X (x402)     │
-│  │   solar charges, 1kW drain │      │  │   custom handler (verify/settle)   │
+│  │   solar charges, 1kW drain │      │  │   x402 payment flow                │
 │  ├─ Pricing formula           │      │  ├─ POST to Pi /consume on payment   │
 │  ├─ Time acceleration (ACCEL) │      │  ├─ JSONL payment log                │
 │  ├─ SQLite time-series        │      │  └─ facilitator: goplausible.xyz     │
@@ -36,32 +36,42 @@ Raspberry Pi 4 (Python only :8001)       Laptop
 
 ```
 algorand/
-├── producer/
-│   ├── main.py                # FastAPI app (GPIO, battery sim, pricing, SQLite)
-│   ├── requirements.txt       # fastapi, uvicorn, spidev, gpiozero, RPi.GPIO
-│   └── .env.template          # ACCEL=60
-│
-├── server/
-│   ├── src/
-│   │   └── index.ts           # Hono app, x402 custom handler, Pi poller, JSONL
-│   ├── .env.template          # SELLER_ADDRESS, FACILITATOR_URL, PI_URL
-│   ├── package.json
-│   └── tsconfig.json
-│
-├── consumer/
-│   ├── agent/
-│   │   ├── src/
-│   │   │   └── index.ts      # x402 client, state machine, delivery tracking
-│   │   ├── .env.template     # BUYER_MNEMONIC, SERVER_URL, BUDGET_USD
-│   │   ├── package.json
-│   │   └── tsconfig.json
-│   └── dashboard/
+├── src/
+│   ├── raspberrypi/
+│   │   ├── plan.md
+│   │   ├── main.py            # FastAPI app (GPIO, battery sim, pricing, SQLite)
+│   │   ├── requirements.txt   # fastapi, uvicorn, spidev, gpiozero, RPi.GPIO
+│   │   └── .env.template      # ACCEL=60
+│   ├── x402/
+│   │   ├── server/
+│   │   │   ├── src/
+│   │   │   │   └── index.ts   # Hono app, x402 payment flow, Pi poller, JSONL
+│   │   │   ├── plan.md
+│   │   │   ├── .env.template  # SELLER_ADDRESS, FACILITATOR_URL, PI_URL
+│   │   │   ├── package.json
+│   │   │   └── tsconfig.json
+│   │   └── client/
+│   │       ├── src/
+│   │       │   └── index.ts   # x402 client, state machine, delivery tracking
+│   │       ├── plan.md
+│   │       ├── .env.template  # BUYER_MNEMONIC, SERVER_URL, BUDGET_USD
+│   │       ├── package.json
+│   │       └── tsconfig.json
+│   └── frontend/
+│       ├── plan.md
 │       ├── src/               # React components, hooks, API client
 │       ├── package.json
 │       └── vite.config.ts
 │
-├── idea.md
-└── plan.md
+├── specs/
+│   ├── constitution.md
+│   ├── plan.md
+│   ├── system-design.md
+│   ├── backend-design-spec.md
+│   └── frontend-react-design-spec.md
+│
+├── docs/                      # lookup/reference; doc 07 is Phase 0 authority
+└── idea.md
 ```
 
 ## Energy Model
@@ -153,22 +163,11 @@ When `delivery_remaining <= 0`: agent can buy again
 | Circle faucet rate limit (20 USDC/2h) | Run out during demo | Pre-fund day before |
 | Price drift between 402 and settlement | Payment mismatch | Accept payment >= 402'd price |
 
-## Work Split
+## Workstreams
 
-```
-Person A (Pi)                    Person B (Laptop)
-────────────────                 ─────────────────────────
-Phase 1 (together)               Phase 1 (together)
-Phase 2: FastAPI + SQLite +      Phase 3: Hono server (mock Pi
-  battery sim + pricing +          data until Pi ready) +
-  /status + /history +             custom x402 handler +
-  /consume + mock fallback         JSONL log + Pi poller
-                                 Phase 4: Consumer agent +
-                                   state machine + delivery +
-                                   /state + /events
-Phase 5: help with dashboard     Phase 5: React dashboard
-Phase 6 (together)               Phase 6 (together)
-```
+Use the component plans under `src/*/plan.md` to split work by service. Keep the payment rail as the
+critical path: prove one settled x402 payment first, then layer producer state, agent behavior, and
+dashboard polish.
 
 ---
 
@@ -201,19 +200,19 @@ Phase 6 (together)               Phase 6 (together)
 5. Verify on https://lora.algokit.io/testnet
 
 6. Create `.env` files (NOT committed):
-   - `server/.env`:
+   - `src/x402/server/.env`:
      ```
      SELLER_ADDRESS=<seller_public_address>
      FACILITATOR_URL=https://facilitator.goplausible.xyz
      PI_URL=http://raspberrypi.local:8001
      ```
-   - `consumer/agent/.env`:
+   - `src/x402/client/.env`:
      ```
      BUYER_MNEMONIC=<buyer_25_word_mnemonic>
      SERVER_URL=http://localhost:4021
      BUDGET_USD=5.00
      ```
-   - `producer/.env`:
+   - `src/raspberrypi/.env`:
      ```
      ACCEL=60
      ```
@@ -227,7 +226,7 @@ Phase 6 (together)               Phase 6 (together)
 ## Phase 2 — Producer Service (Python, Pi)
 
 **Goal**: FastAPI service that reads hardware, simulates battery, computes price, persists to SQLite, and exposes HTTP endpoints.
-**Time**: ~6 hours (Person A)
+**Time**: ~6 hours
 **Dependency**: None (runs standalone)
 
 ### Endpoints
@@ -240,7 +239,7 @@ Phase 6 (together)               Phase 6 (together)
 
 ### Implementation
 
-1. `producer/requirements.txt`:
+1. `src/raspberrypi/requirements.txt`:
    ```
    fastapi
    uvicorn
@@ -249,7 +248,7 @@ Phase 6 (together)               Phase 6 (together)
    RPi.GPIO
    ```
 
-2. `producer/main.py`:
+2. `src/raspberrypi/main.py`:
    - FastAPI on port 8001
    - **Hardware layer**: MCP3008 ADC (SPI ch0) → 0-1023 → 0.0-5.0 kW. GPIO17 pulled high, GND = EV plugged. Moving average (last 5 reads).
    - **Mock fallback**: if `spidev` import fails, use sinusoidal solar + random EV toggles.
@@ -284,7 +283,7 @@ Phase 6 (together)               Phase 6 (together)
 ## Phase 3 — Hono x402 Server (TypeScript, Laptop)
 
 **Goal**: x402-protected energy buy endpoint. Calls Pi for state, handles payment, calls Pi /consume on success.
-**Time**: ~5 hours (Person B)
+**Time**: ~5 hours
 **Dependency**: Can develop against mock Pi data until Phase 2 is ready.
 
 ### Endpoints
@@ -298,13 +297,13 @@ Phase 6 (together)               Phase 6 (together)
 
 1. Initialize:
    ```
-   cd server
+   cd src/x402/server
    pnpm init
    pnpm add @x402/core @x402/avm @x402/hono hono @hono/node-server dotenv
    pnpm add -D typescript @types/node tsx
    ```
 
-2. `server/src/index.ts`:
+2. `src/x402/server/src/index.ts`:
    - Load `.env` (SELLER_ADDRESS, FACILITATOR_URL, PI_URL)
    - **Background poller** (every 2s):
      ```ts
@@ -314,19 +313,19 @@ Phase 6 (together)               Phase 6 (together)
      }, 2000);
      ```
    - **GET /status**: returns `piStatus` immediately
-   - **GET /energy/buy?kwh=X**: custom x402 handler (NOT paymentMiddleware):
+   - **GET /energy/buy?kwh=X**: x402-protected endpoint. Start with the official demo/payment-middleware path and fixed price for Phase 0; after one settled payment works, add dynamic pricing if the SDK path supports per-request requirements:
      1. Parse `kwh` from query (default 1, max = battery_kwh)
      2. Compute `totalPrice = kwh * piStatus.price_per_kwh`
      3. If no X-PAYMENT header → return 402 with payment requirements:
         ```ts
         { scheme: 'exact', network: ALGORAND_TESTNET_CAIP2, payTo: SELLER_ADDRESS, price: `$${totalPrice}`, extra: { asset: 10458941 } }
         ```
-     4. If X-PAYMENT header present → call `resourceServer.verifyPayment()` then `resourceServer.settlePayment()`
+     4. If X-PAYMENT header present → verify and settle through the chosen x402 SDK/facilitator path
      5. On settlement success → call Pi `POST /consume { kwh }`
      6. If Pi returns 409 (insufficient) → refund logic or error
      7. Log to JSONL: `{ ts, tx_id, kwh, price, buyer }`
      8. Return 200: `{ granted_kwh, price_paid, tx_id, timestamp, new_battery_kwh }`
-   - **JSONL logging**: append to `server/payments.jsonl`
+   - **JSONL logging**: append to `src/x402/server/payments.jsonl`
 
 3. Test:
    - Mock Pi: run producer in mock mode on localhost:8001 OR hardcode piStatus
@@ -344,7 +343,7 @@ Phase 6 (together)               Phase 6 (together)
 ## Phase 4 — Consumer Agent (TypeScript, Laptop)
 
 **Goal**: Autonomous agent that polls, evaluates, pays, and tracks delivery.
-**Time**: ~5 hours (Person B)
+**Time**: ~5 hours
 **Dependency**: Phase 3 (Hono server running)
 
 ### Endpoints (state server)
@@ -358,13 +357,13 @@ Phase 6 (together)               Phase 6 (together)
 
 1. Initialize:
    ```
-   cd consumer/agent
+   cd src/x402/client
    pnpm init
    pnpm add @x402/core @x402/fetch @x402/avm dotenv hono @hono/node-server
    pnpm add -D typescript @types/node tsx
    ```
 
-2. `consumer/agent/src/index.ts`:
+2. `src/x402/client/src/index.ts`:
    - Load `.env` (BUYER_MNEMONIC, SERVER_URL, BUDGET_USD)
    - Init x402 client:
      ```ts
@@ -418,7 +417,7 @@ Phase 6 (together)               Phase 6 (together)
 ## Phase 5 — React Dashboard (Vite/TypeScript, Laptop)
 
 **Goal**: Single-page real-time visualization of all system state.
-**Time**: ~4 hours (S owns, B supports; Person A/N assists with producer data)
+**Time**: ~4 hours
 **Dependency**: Phases 2, 3, 4 running
 
 ### Data Sources
@@ -452,9 +451,9 @@ Phase 6 (together)               Phase 6 (together)
 
 ### Implementation
 
-1. `consumer/dashboard/package.json`: React, Vite, TypeScript, charting library.
+1. `src/frontend/package.json`: React, Vite, TypeScript, charting library.
 
-2. `consumer/dashboard/src/`:
+2. `src/frontend/src/`:
    - `api/client.ts`: typed fetch helpers for `/api/snapshot`, `/api/history`, `/api/events`, `/api/payments`.
    - `hooks/useDashboardData.ts`: polling every 2s for snapshot/events and 5s for history.
    - Components: metric strip, energy flow, solar/price chart, battery chart, agent panel, payment ledger, system health.
@@ -482,16 +481,16 @@ Phase 6 (together)               Phase 6 (together)
 
 2. **Process management** on Pi:
    ```bash
-   # producer/start.sh
+   # src/raspberrypi/start.sh
    uvicorn main:app --host 0.0.0.0 --port 8001
    ```
 
 3. **Laptop startup script**:
    ```bash
    # start.sh
-   cd server && pnpm tsx src/index.ts &
-   cd consumer/agent && pnpm tsx src/index.ts &
-    cd consumer/dashboard && pnpm dev --host 0.0.0.0 --port 5173 &
+   cd src/x402/server && pnpm tsx src/index.ts &
+   cd src/x402/client && pnpm tsx src/index.ts &
+   cd src/frontend && pnpm dev --host 0.0.0.0 --port 5173 &
    ```
 
 4. **End-to-end dry run** (full demo sequence):

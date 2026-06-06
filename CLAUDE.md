@@ -16,16 +16,17 @@ Your EV autonomously buys cheap surplus solar from your neighbor, pays instantly
 
 ## Team
 
-4 people. At least **one member must be fully on-site** to present the final pitch.
-⚠️ Note: the build plan in the repo (`plan.md`) was written for **2 people** — see
-[docs/team-operating-model.md](docs/team-operating-model.md) for current ownership and
-[docs/06-build-plan-and-tasks.md](docs/06-build-plan-and-tasks.md) for the original phase checklist.
+At least **one member must be fully on-site** to present the final pitch.
+See [docs/team-operating-model.md](docs/team-operating-model.md) for current ownership and
+[specs/plan.md](specs/plan.md) for the implementation plan.
 
 ## Source of truth
 
 This working dir **is** the team repo `Dakavon/algorand-x402-hackathon` (`origin` → GitHub, branch
-`main`). The authoritative plan lives at the repo root: `idea.md` and `plan.md`. Our `CLAUDE.md`
-and `docs/` add hackathon context, strategy, and a task distillation the repo doesn't have.
+`main`). Use [specs/constitution.md](specs/constitution.md) as the project charter and guardrails.
+Use `specs/*` for implementation details. Use `docs/*` as lookup/reference material, except
+[docs/07-prephase-setup-and-mock-plan.md](docs/07-prephase-setup-and-mock-plan.md), which remains
+the Phase 0 payment-rail authority. `idea.md` is the pitch/product vision.
 
 ## Mandatory constraints (to qualify for prizes)
 
@@ -41,13 +42,13 @@ and `docs/` add hackathon context, strategy, and a task distillation the repo do
   Folks Finance xALGO (idle-treasury yield), Alpha Arcade (prediction markets for
   "buy tomorrow's solar today").
 
-## Stack (decided — see plan.md)
+## Stack (decided — see specs/plan.md)
 
-- **Producer:** Raspberry Pi 4 — Python/FastAPI (:8001). Potentiometer→ADC = solar, GPIO = "EV plugged",
+- **Producer:** `src/raspberrypi` — Python/FastAPI (:8001). Potentiometer→ADC = solar, GPIO = "EV plugged",
   battery sim, dynamic pricing, SQLite. Mock fallback for laptop-only dev.
-- **x402 Server:** Laptop — TypeScript/Hono (:4021). Custom x402 handler wraps `/energy/buy`.
-- **Consumer Agent:** Laptop — TypeScript (:4022). State machine buyer (IDLE→EVAL→PAY→CHARGING).
-- **Dashboard:** Laptop — React/Vite (:5173). Gauges, charts, payment log w/ Lora links.
+- **x402 Server:** `src/x402/server` — TypeScript/Hono (:4021). Wraps `/energy/buy` behind x402.
+- **Consumer Agent:** `src/x402/client` — TypeScript (:4022). State machine buyer (IDLE→EVAL→PAY→CHARGING).
+- **Dashboard:** `src/frontend` — React/Vite (:5173). Gauges, charts, payment log w/ Lora links.
 - **Payments:** x402 (`@x402/avm`, `@x402/fetch`, `@x402/hono`), GoPlausible facilitator,
   **USDC TestNet (ASA `10458941`)**; EURQ as a bonus add-on.
 - **Tooling:** AlgoKit / algokey, Lora explorer + faucet, Circle USDC faucet.
@@ -62,14 +63,13 @@ and `docs/` add hackathon context, strategy, and a task distillation the repo do
 | [docs/03-x402-and-agentic-commerce.md](docs/03-x402-and-agentic-commerce.md) | x402 flow, agentic commerce concepts, Bazaar, ARCs, security |
 | [docs/04-law-42c-enwg.md](docs/04-law-42c-enwg.md) | Verified §42c EnWG legal basis and safe pitch framing |
 | [docs/05-strategy-and-landscape.md](docs/05-strategy-and-landscape.md) | Prior winners, differentiation, demo & pitch strategy |
-| [docs/06-build-plan-and-tasks.md](docs/06-build-plan-and-tasks.md) | **Concrete architecture, constants, 6-phase task checklist** |
+| [docs/06-build-plan-and-tasks.md](docs/06-build-plan-and-tasks.md) | Historical/task distillation; use `specs/*` for implementation authority |
 | [docs/07-prephase-setup-and-mock-plan.md](docs/07-prephase-setup-and-mock-plan.md) | **Pre-phase: wallet setup, roles, verified SDK, local mock-payment milestone (share this)** |
-| [docs/08-transaction-flow-explained.md](docs/08-transaction-flow-explained.md) | **End-to-end flow: accounts layer vs x402 protocol layer, the 402 handshake, code provenance** |
-| [docs/09-competitive-landscape-and-crypto-fit.md](docs/09-competitive-landscape-and-crypto-fit.md) | **Verified competitive landscape + why crypto/x402 fits; killed-claims cheat-sheet for the pitch** |
-| [docs/backend-design-spec.md](docs/backend-design-spec.md) | Backend service contracts and dashboard API endpoints |
-| [docs/frontend-react-design-spec.md](docs/frontend-react-design-spec.md) | React dashboard ownership, layout, components, and data needs |
-| [docs/system-design.md](docs/system-design.md) | System architecture, payment flow, boundaries, future product shape |
-| [docs/team-operating-model.md](docs/team-operating-model.md) | 4-person ownership, capability cards, coordination cadence |
+| [specs/plan.md](specs/plan.md) | Implementation plan and phase breakdown |
+| [specs/backend-design-spec.md](specs/backend-design-spec.md) | Backend service contracts and dashboard API endpoints |
+| [specs/frontend-react-design-spec.md](specs/frontend-react-design-spec.md) | React dashboard ownership, layout, components, and data needs |
+| [specs/system-design.md](specs/system-design.md) | System architecture, payment flow, boundaries, future product shape |
+| [docs/team-operating-model.md](docs/team-operating-model.md) | Current ownership, capability cards, coordination cadence |
 | [docs/research-brief.md](docs/research-brief.md) | Assigned market, legal, and competitive research workstream |
 | [specs/constitution.md](specs/constitution.md) | Project constitution, scope rules, decision rules, pitch rules |
 

@@ -2,6 +2,16 @@
 
 > P2P Agentic Energy Sharing
 
+## Document Authority
+
+This constitution defines the project charter, scope guardrails, demo principles, and decision rules.
+For implementation details, follow `specs/*`. Use `docs/*` as lookup and reference material, except
+`docs/07-prephase-setup-and-mock-plan.md`, which remains the Phase 0 authority for proving the first
+settled x402 payment.
+
+Area-specific plans under `src/*/plan.md` derive from `specs/plan.md` and must not contradict this
+constitution.
+
 ## Problem
 
 With §42c EnWG (Energy Sharing), households can sell surplus electricity directly to neighbors. Current challenges:
@@ -39,13 +49,14 @@ Agents make buy/sell decisions without human intervention. The system should wor
 - Physical potentiometer controls solar output (0–5 kW via MCP3008 ADC)
 - GPIO pin detects EV plug inserted (jumper to GND)
 - USDC transfers on Algorand Testnet (Circle ASA `10458941`) — verifiable on-chain
-- No mocks in the live demo
+- Dev mocks are allowed for parallel development and the Phase 0 laptop payment milestone
+- The primary live demo should use real hardware input and real TestNet payments; mock mode is a fallback
 
 ### 3. Simplicity Over Features
 
 - Single producer, single consumer
 - One asset (USDC), one payment scheme (exact)
-- Three endpoints per service maximum
+- Minimal endpoints per service; dashboard aggregation endpoints are allowed when they simplify the UI
 - No user accounts, no admin UI, no database migrations
 
 ### 4. Time Acceleration
@@ -100,6 +111,10 @@ Solar → Self-consumption → Storage → Sale → Neighbor / EV
 ```
 
 ### Payment Flow (x402)
+
+Implementation rule: prove the official x402 demo/payment-middleware flow first, using the hosted
+facilitator and a real settled TestNet USDC payment. Dynamic `/energy/buy?kwh=X` pricing layers on
+after that milestone.
 
 1. Consumer Agent discovers an offer via `/status`
 2. Sends request to Producer API
@@ -194,7 +209,7 @@ Transitions:
 - Battery level (%) — sawtooth: drops on purchase, recovers from solar
 - Price $/kWh — live from pricing formula
 - EV flow indicator — 3 kW during delivery, 0 kW between purchases
-- Live charts (solar, battery, price over time) from Pi SQLite history
+- Live charts (solar, battery, price over time) from producer history via the Hono dashboard API
 - Agent state badge (IDLE / EVALUATING / PAYING / CHARGING)
 - Payment log with clickable Lora explorer links
 
@@ -202,31 +217,36 @@ Transitions:
 
 ```
 src/
-  producer/           # Python FastAPI (runs on Pi)
-  server/             # TypeScript Hono x402 server
-  consumer/
-    agent/            # TypeScript x402 client
-    dashboard/        # React/Vite dashboard
+  raspberrypi/        # Python FastAPI producer service (runs on Pi or laptop mock)
+  x402/
+    server/           # TypeScript Hono x402 resource server
+    client/           # TypeScript x402 consumer agent
+  frontend/           # React/Vite dashboard
 specs/
   constitution.md     # This file
+  plan.md             # Implementation plan
+  system-design.md    # System architecture and boundaries
+  backend-design-spec.md
+  frontend-react-design-spec.md
   features/           # Feature specifications
+docs/                 # Lookup/reference docs; doc 07 is Phase 0 authority
 ```
 
 ## Environment Variables
 
-### Producer (.env)
+### Raspberry Pi Producer (`src/raspberrypi/.env`)
 ```
 ACCEL=60
 ```
 
-### Server (.env)
+### x402 Server (`src/x402/server/.env`)
 ```
 SELLER_ADDRESS=<algorand_address>
 FACILITATOR_URL=https://facilitator.goplausible.xyz
 PI_URL=http://raspberrypi.local:8001
 ```
 
-### Consumer Agent (.env)
+### x402 Client / Consumer Agent (`src/x402/client/.env`)
 ```
 BUYER_MNEMONIC=<25_word_mnemonic>
 SERVER_URL=http://localhost:4021
