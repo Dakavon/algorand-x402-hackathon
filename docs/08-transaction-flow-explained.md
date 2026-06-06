@@ -8,7 +8,7 @@ A walkthrough of everything that happens to make one autonomous energy payment, 
 | Layer | What it is | Who/what does it | Depends on x402? |
 |---|---|---|---|
 | **1. Accounts & money** | Blockchain identities + balances (ALGO for gas, USDC to spend) | You, manually, with `setup/` scripts + faucets | ❌ No — pure Algorand |
-| **2. x402 protocol** | The HTTP "pay-to-access" handshake between buyer & seller | Our `server/` + `consumer/agent/` code | ✅ Yes — the `@x402/*` SDK |
+| **2. x402 protocol** | The HTTP "pay-to-access" handshake between buyer & seller | Our `src/x402/server/` + `src/x402/client/` code | Yes — the `@x402/*` SDK |
 
 Layer 2 **uses** the accounts from Layer 1. You can't do the x402 payment until Layer 1 exists
 (funded, opted-in accounts). That's why we set up wallets first.
@@ -41,8 +41,8 @@ We cloned the official **`algorandfoundation/x402-demo`** (x402 **v2.11.0**) and
 
 | Our file | Adapted from | Changes |
 |---|---|---|
-| `server/src/index.ts` | `x402-demo/x402-examples/server/hono/index.ts` | route `/weather` → `/energy/buy`; added free `/health`; energy JSON; price from env |
-| `consumer/agent/src/index.ts` | `x402-demo/x402-examples/client/fetch/index.ts` | endpoint → `/energy/buy`; added explorer link; same signer + `wrapFetchWithPayment` |
+| `src/x402/server/src/index.ts` | `x402-demo/x402-examples/server/hono/index.ts` | route `/weather` -> `/energy/buy`; added free `/health`; energy JSON; dynamic price |
+| `src/x402/client/src/index.ts` | `x402-demo/x402-examples/client/fetch/index.ts` | endpoint -> `/energy/buy`; added explorer link; same signer + `wrapFetchWithPayment` |
 
 So the payment logic is the **proven reference implementation**, not invented by us. We just renamed
 the product from "weather data" to "energy."
@@ -50,7 +50,7 @@ the product from "weather data" to "energy."
 ### The handshake (what happens when the agent buys)
 
 ```
-BUYER (consumer/agent)                 SELLER (server)                 FACILITATOR + TESTNET
+BUYER (src/x402/client)                SELLER (src/x402/server)        FACILITATOR + TESTNET
        │                                     │                                  │
   (1)  │ ── GET /energy/buy ───────────────► │                                  │
        │                                     │                                  │
@@ -87,8 +87,8 @@ BUYER (consumer/agent)                 SELLER (server)                 FACILITAT
 7. **Agent prints** the Lora explorer link to the real transaction.
 
 ### How Layer 2 uses Layer 1
-- Buyer's **mnemonic** (`consumer/agent/.env` → `AVM_MNEMONIC`) → signs the payment in step 3.
-- Seller's **address** (`server/.env` → `AVM_ADDRESS`) → the `payTo` in step 2.
+- Buyer's **mnemonic** (`src/x402/client/.env` -> `BUYER_MNEMONIC`) signs the payment in step 3.
+- Seller's **address** (`src/x402/server/.env` -> `SELLER_ADDRESS`) is the `payTo` in step 2.
 - **USDC asset** (`10458941`) + **TestNet** (CAIP-2) → the rails the transfer runs on.
 - The buyer's **USDC balance** → the money that actually moves.
 

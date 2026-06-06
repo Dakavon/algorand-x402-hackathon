@@ -1,11 +1,11 @@
 {
-  "name": "energy-agent",
+  "name": "energy-x402-client",
   "private": true,
   "type": "module",
-  "description": "Buyer: autonomous EV agent paying for energy via x402 (Algorand TestNet)",
+  "description": "Autonomous EV agent paying for energy via x402 on Algorand TestNet",
   "scripts": {
     "start": "tsx src/index.ts",
-    "buy": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

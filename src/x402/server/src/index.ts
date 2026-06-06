@@ -1,8 +1,5 @@
-// Energy SELLER — Hono x402 server.
-// Sells solar energy per kWh; payment is settled on Algorand by the hosted
-// facilitator. The server only knows the seller's PUBLIC address.
-//
-// Verified against algorandfoundation/x402-demo (x402 v2.11.0).
+// Energy seller: Hono x402 resource server.
+// Holds only the seller public address; the buyer signs in src/x402/client.
 
 import { config } from "dotenv";
 import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
@@ -18,7 +15,7 @@ config();
 const ALGORAND_TESTNET_CAIP2 = "algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=" as const;
 const ALGORAND_MAINNET_CAIP2 = "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=" as const;
 
-const avmAddress = process.env.AVM_ADDRESS;
+const sellerAddress = process.env.SELLER_ADDRESS;
 const facilitatorUrl = process.env.FACILITATOR_URL;
 const port = Number(process.env.PORT ?? 4021);
 const pricePerKwh = process.env.PRICE_PER_KWH ?? process.env.PRICE_PER_KWH_USD ?? "0.01";
@@ -31,6 +28,7 @@ const mockPricePerKwh = process.env.MOCK_PRICE_PER_KWH;
 const producerUrl = process.env.PI_URL ?? "http://localhost:8001";
 const agentUrl = process.env.AGENT_URL ?? "http://localhost:4022";
 const KWH_PER_PURCHASE = 1;
+const MIN_KWH_PER_PURCHASE = 0.1;
 const POLL_INTERVAL_MS = 2000;
 const STALE_AFTER_MS = 5000;
 const PAYMENTS_LOG = join(process.cwd(), "payments.jsonl");
@@ -47,6 +45,13 @@ type ProducerStatus = {
   ev_plugged: boolean;
   has_offer: boolean;
   stale?: boolean;
+};
+
+type ConsumeResponse = {
+  ok: boolean;
+  battery_kwh?: number;
+  battery_pct?: number;
+  error?: string;
 };
 
 type AgentState = {
@@ -83,19 +88,18 @@ type ApiErrorCode =
   | "PRODUCER_UNREACHABLE"
   | "AGENT_UNREACHABLE"
   | "NO_OFFER_AVAILABLE"
+  | "INSUFFICIENT_BATTERY"
   | "INVALID_KWH"
   | "INTERNAL_ERROR";
 
-// Laptop-only simulation: MOCK_EV_PLUGGED=true makes the producer behave like a
-// live producer with the EV plugged in, so the agent can buy on a loop.
 const fallbackProducer: ProducerStatus = {
   ts: Date.now() / 1000,
   solar_kw: mockEvPlugged ? 4.2 : 0,
   battery_kwh: 10,
   battery_pct: 1,
-  price_per_kwh: Number(mockPricePerKwh ?? pricePerKwh),
+  price_per_kwh: Number(mockPricePerKwh || pricePerKwh),
   ev_plugged: mockEvPlugged,
-  has_offer: true,
+  has_offer: mockEvPlugged,
   stale: true,
 };
 
@@ -146,7 +150,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 function producerHealth(): HealthStatus {
-  if (!producerLastSeenMs) return "down";
+  if (!producerLastSeenMs) return mockEvPlugged ? "stale" : "down";
   const age = Date.now() - producerLastSeenMs;
   return age > STALE_AFTER_MS ? "stale" : "ok";
 }
@@ -162,9 +166,8 @@ function readPaymentsLog(): PaymentRow[] {
   const content = readFileSync(PAYMENTS_LOG, "utf8").trim();
   if (!content) return [];
 
-  const lines = content.split("\n");
   const rows: PaymentRow[] = [];
-  for (const line of lines) {
+  for (const line of content.split("\n")) {
     try {
       const parsed = JSON.parse(line) as PaymentRow;
       rows.push({ asset_symbol: paymentAssetSymbol, ...parsed });
@@ -187,18 +190,49 @@ function loraTxUrl(txId: string): string {
   return `https://lora.algokit.io/${loraNetworkPath}/tx/${txId}`;
 }
 
-function normalizeProducer(status: ProducerStatus): ProducerStatus {
-  const parsedPrice =
-    typeof status.price_per_kwh === "number"
-      ? status.price_per_kwh
-      : typeof status.price_per_kwh === "undefined"
-        ? Number(pricePerKwh)
-        : Number(status.price_per_kwh);
+function parseRequestedKwh(raw: string | undefined): number | null {
+  const requestedKwh = Number(raw ?? String(KWH_PER_PURCHASE));
+  if (!Number.isFinite(requestedKwh) || requestedKwh < MIN_KWH_PER_PURCHASE) {
+    return null;
+  }
+  return requestedKwh;
+}
 
+function normalizeProducer(status: ProducerStatus): ProducerStatus {
   return {
     ...status,
     ev_plugged: mockEvPlugged || status.ev_plugged,
-    price_per_kwh: mockPricePerKwh ? Number(mockPricePerKwh) : parsedPrice,
+    price_per_kwh: mockPricePerKwh ? Number(mockPricePerKwh) : Number(status.price_per_kwh),
+  };
+}
+
+function canSellKwh(kwh: number): { ok: true } | { ok: false; status: number; code: ApiErrorCode; message: string } {
+  if (!producerCache.has_offer) {
+    return { ok: false, status: 409, code: "NO_OFFER_AVAILABLE", message: "No surplus energy is available" };
+  }
+  if (producerCache.battery_kwh < kwh) {
+    return { ok: false, status: 409, code: "INSUFFICIENT_BATTERY", message: "Not enough stored energy is available" };
+  }
+  if (producerHealth() === "down" && !mockEvPlugged) {
+    return { ok: false, status: 503, code: "PRODUCER_UNREACHABLE", message: "Producer is unreachable" };
+  }
+  return { ok: true };
+}
+
+function applyFallbackConsume(kwh: number): ConsumeResponse {
+  producerCache = {
+    ...producerCache,
+    battery_kwh: Number(Math.max(0, producerCache.battery_kwh - kwh).toFixed(3)),
+  };
+  producerCache = {
+    ...producerCache,
+    battery_pct: Number((producerCache.battery_kwh / 10).toFixed(3)),
+    has_offer: producerCache.battery_kwh > 0 || producerCache.solar_kw >= 1,
+  };
+  return {
+    ok: true,
+    battery_kwh: producerCache.battery_kwh,
+    battery_pct: producerCache.battery_pct,
   };
 }
 
@@ -254,12 +288,12 @@ async function pollAgent(): Promise<void> {
   }
 }
 
-if (!avmAddress || avmAddress.includes("PASTE")) {
-  console.error("❌ AVM_ADDRESS (seller address) is required in server/.env");
+if (!sellerAddress || sellerAddress.includes("PASTE")) {
+  console.error("SELLER_ADDRESS is required in src/x402/server/.env");
   process.exit(1);
 }
 if (!facilitatorUrl) {
-  console.error("❌ FACILITATOR_URL is required in server/.env");
+  console.error("FACILITATOR_URL is required in src/x402/server/.env");
   process.exit(1);
 }
 
@@ -269,14 +303,12 @@ const accepts = [
   {
     scheme: "exact",
     price: (context: { adapter?: { getQueryParam?: (name: string) => string | undefined } }) => {
-      const requestedKwhRaw = context.adapter?.getQueryParam?.("kwh") ?? String(KWH_PER_PURCHASE);
-      const requestedKwh = Number(requestedKwhRaw);
-      const kwh = Number.isFinite(requestedKwh) && requestedKwh > 0 ? requestedKwh : KWH_PER_PURCHASE;
+      const kwh = parseRequestedKwh(context.adapter?.getQueryParam?.("kwh")) ?? KWH_PER_PURCHASE;
       const unitPrice = producerCache.price_per_kwh || Number(pricePerKwh);
       return formatPrice(kwh * unitPrice);
     },
     network: paymentNetwork,
-    payTo: avmAddress,
+    payTo: sellerAddress,
     extra: {
       asset: paymentAssetId,
       decimals: paymentAssetDecimals,
@@ -292,7 +324,6 @@ const server = new x402ResourceServer(facilitatorClient).register(
 
 const app = new Hono();
 
-// Free: health/status (no payment).
 app.get("/health", c =>
   c.json({
     ok: true,
@@ -302,7 +333,7 @@ app.get("/health", c =>
     payment_symbol: paymentAssetSymbol,
     price_per_kwh: Number(pricePerKwh),
     price_per_kwh_usd: Number(pricePerKwh),
-    pay_to: avmAddress,
+    pay_to: sellerAddress,
   }),
 );
 
@@ -321,8 +352,7 @@ app.get("/api/health", c =>
 app.get("/api/snapshot", c => c.json(snapshotPayload()));
 
 app.get("/api/history", async c => {
-  const minutesRaw = c.req.query("minutes") ?? "10";
-  const minutes = Number(minutesRaw);
+  const minutes = Number(c.req.query("minutes") ?? "10");
   if (!Number.isFinite(minutes) || minutes <= 0) {
     return c.json(apiError("INVALID_KWH", "minutes query must be a positive number", false), 400);
   }
@@ -336,8 +366,7 @@ app.get("/api/history", async c => {
 });
 
 app.get("/api/events", async c => {
-  const limitRaw = c.req.query("limit") ?? "100";
-  const limit = Math.max(1, Math.min(100, Number(limitRaw) || 100));
+  const limit = Math.max(1, Math.min(100, Number(c.req.query("limit") ?? "100") || 100));
 
   let agentEvents: DashboardEvent[] = [];
   try {
@@ -354,16 +383,9 @@ app.get("/api/events", async c => {
 
 app.get("/api/payments", c => c.json(readPaymentsLog()));
 
-// The buyer reports a settled payment (with the REAL on-chain tx) so the ledger
-// and dashboard show genuine, clickable Lora links.
 app.post("/report-payment", async c => {
   const body = (await c.req.json().catch(() => null)) as Partial<PaymentRow> | null;
-  if (
-    !body ||
-    typeof body.kwh !== "number" ||
-    typeof body.price_paid_usdc !== "number" ||
-    !body.tx_id
-  ) {
+  if (!body || typeof body.kwh !== "number" || typeof body.price_paid_usdc !== "number" || !body.tx_id) {
     return c.json(apiError("INTERNAL_ERROR", "invalid payment report", false), 400);
   }
   const row: PaymentRow = {
@@ -388,7 +410,21 @@ app.post("/report-payment", async c => {
   return c.json({ ok: true });
 });
 
-// Paywalled: buying energy requires an x402 payment.
+app.use("/energy/buy", async (c, next) => {
+  const requestedKwh = parseRequestedKwh(c.req.query("kwh"));
+  if (requestedKwh === null) {
+    return c.json(apiError("INVALID_KWH", "kwh query must be at least 0.1", false), 400);
+  }
+
+  const sellable = canSellKwh(requestedKwh);
+  if (!sellable.ok) {
+    const body = apiError(sellable.code, sellable.message, sellable.status >= 500);
+    return sellable.status === 503 ? c.json(body, 503) : c.json(body, 409);
+  }
+
+  await next();
+});
+
 app.use(
   paymentMiddleware(
     {
@@ -403,39 +439,51 @@ app.use(
 );
 
 app.get("/energy/buy", async c => {
-  const requestedKwhRaw = c.req.query("kwh") ?? String(KWH_PER_PURCHASE);
-  const requestedKwh = Number(requestedKwhRaw);
-  if (!Number.isFinite(requestedKwh) || requestedKwh <= 0) {
-    return c.json(apiError("INVALID_KWH", "kwh query must be a positive number", false), 400);
-  }
-
-  if (!producerCache.has_offer) {
-    return c.json(apiError("NO_OFFER_AVAILABLE", "No surplus energy is available", true), 409);
+  const requestedKwh = parseRequestedKwh(c.req.query("kwh"));
+  if (requestedKwh === null) {
+    return c.json(apiError("INVALID_KWH", "kwh query must be at least 0.1", false), 400);
   }
 
   const unitPrice = producerCache.price_per_kwh || Number(pricePerKwh);
   const pricePaid = Number((requestedKwh * unitPrice).toFixed(paymentAssetDecimals));
+  let consumeResult: ConsumeResponse;
 
   if (producerHealth() === "ok") {
     try {
-      await fetch(`${producerUrl}/consume`, {
+      const response = await fetch(`${producerUrl}/consume`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kwh: requestedKwh }),
       });
+      consumeResult = (await response.json().catch(() => ({ ok: false }))) as ConsumeResponse;
+      if (response.status === 409) {
+        return c.json(apiError("INSUFFICIENT_BATTERY", consumeResult.error ?? "insufficient_battery", true), 409);
+      }
+      if (!response.ok || !consumeResult.ok) {
+        return c.json(apiError("PRODUCER_UNREACHABLE", "Producer consume failed after payment", true), 502);
+      }
+      if (typeof consumeResult.battery_kwh === "number" && typeof consumeResult.battery_pct === "number") {
+        producerCache = {
+          ...producerCache,
+          battery_kwh: consumeResult.battery_kwh,
+          battery_pct: consumeResult.battery_pct,
+          has_offer: consumeResult.battery_kwh > 0 || producerCache.solar_kw >= 1,
+        };
+      }
     } catch {
-      // Producer unavailable — still grant; battery sync catches up on next poll.
+      return c.json(apiError("PRODUCER_UNREACHABLE", "Producer consume failed after payment", true), 502);
     }
+  } else {
+    consumeResult = applyFallbackConsume(requestedKwh);
   }
 
-  // The REAL on-chain tx id is known to the buyer (from the x402 settle response),
-  // not here. The agent reports it via POST /report-payment, which is the source
-  // of truth for the ledger + Lora links. We deliberately do NOT fabricate a tx.
   return c.json({
     granted_kwh: requestedKwh,
     price_paid_usdc: pricePaid,
     asset_symbol: paymentAssetSymbol,
     timestamp: new Date().toISOString(),
+    new_battery_kwh: consumeResult.battery_kwh ?? producerCache.battery_kwh,
+    new_battery_pct: consumeResult.battery_pct ?? producerCache.battery_pct,
   });
 });
 
@@ -448,9 +496,9 @@ setInterval(() => {
 
 serve({ fetch: app.fetch, port });
 
-console.log(`⚡ Energy seller (x402 server) listening at http://localhost:${port}`);
-console.log(`   pay-to : ${avmAddress}`);
-console.log(`   asset  : ${paymentAssetSymbol} (${paymentAssetId})`);
-console.log(`   network: ${paymentNetwork}`);
-console.log(`   price  : ${pricePerKwh} ${paymentAssetSymbol}/kWh`);
-console.log(`   facil. : ${facilitatorUrl}`);
+console.log(`Energy x402 server listening at http://localhost:${port}`);
+console.log(`  pay-to : ${sellerAddress}`);
+console.log(`  asset  : ${paymentAssetSymbol} (${paymentAssetId})`);
+console.log(`  network: ${paymentNetwork}`);
+console.log(`  price  : ${pricePerKwh} ${paymentAssetSymbol}/kWh`);
+console.log(`  facil. : ${facilitatorUrl}`);

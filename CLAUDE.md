@@ -79,7 +79,8 @@ the Phase 0 payment-rail authority. `idea.md` is the pitch/product vision.
 Algorand TestNet** (laptop, mock; no Pi yet).
 - Settled tx: `NL2FAXW72GC2BBBCM3D2T5DAHDBN36IY3L6JLLJ66SJOATXXPH2A`
   (buyer −0.01 / seller +0.01 USDC, verified on-chain).
-- Reproduce: see [RUN.md](RUN.md). Code in `server/` (seller) + `consumer/agent/` (buyer).
+- Reproduce: see [RUN.md](RUN.md). Canonical code now lives under `src/*`; legacy top-level
+  folders only preserve earlier Phase 0 work-in-progress context.
 
 **Next:** Phase 2 (still local) — dynamic per-kWh pricing + mock producer state (solar/battery) +
 agent state machine (IDLE→EVAL→PAY→CHARGING) + budget cap + re-buy loop. Then dashboard, then Pi.

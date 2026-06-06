@@ -27,4 +27,6 @@ node balances.mjs <buyer address>
 ## Notes
 - USDC asset id (TestNet): `10458941`. Override via `USDC_ASSET_ID`.
 - Default node: AlgoNode TestNet (`https://testnet-api.algonode.cloud`). Override via `ALGOD_URL`.
-- Mnemonics are **secrets** — put the buyer's into `consumer/agent/.env`, never commit it.
+- Mnemonics are **secrets** — put the buyer's into `src/x402/client/.env` as
+  `BUYER_MNEMONIC`, never commit it. Put the seller public address into
+  `src/x402/server/.env` as `SELLER_ADDRESS`.

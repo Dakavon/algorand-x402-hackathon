@@ -1,4 +1,4 @@
-// Energy BUYER — autonomous EV agent (x402 client + state server).
+// Energy buyer: autonomous EV agent using x402 fetch.
 
 import { config } from "dotenv";
 import { serve } from "@hono/node-server";
@@ -17,12 +17,12 @@ config();
 const ALGORAND_TESTNET_CAIP2 = "algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=" as const;
 const ALGORAND_MAINNET_CAIP2 = "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=" as const;
 
-const avmMnemonic = process.env.AVM_MNEMONIC;
-const resourceServerUrl = process.env.RESOURCE_SERVER_URL ?? "http://localhost:4021";
+const buyerMnemonic = process.env.BUYER_MNEMONIC;
+const serverUrl = process.env.SERVER_URL ?? "http://localhost:4021";
 const endpointPath = process.env.ENDPOINT_PATH ?? "/energy/buy";
-const buyUrl = `${resourceServerUrl}${endpointPath}`;
+const buyUrl = `${serverUrl}${endpointPath}`;
 const port = Number(process.env.PORT ?? 4022);
-const budgetAmount = Number(process.env.BUDGET_AMOUNT ?? process.env.BUDGET_USD ?? 5);
+const budgetAmount = Number(process.env.BUDGET_USD ?? 5);
 const maxPricePerKwh = Number(process.env.MAX_PRICE_PER_KWH ?? 0.2);
 const kwhPerPurchase = Number(process.env.KWH_PER_PURCHASE ?? 1);
 const pollIntervalMs = Number(process.env.POLL_INTERVAL_MS ?? 2000);
@@ -90,8 +90,7 @@ let currentState: AgentState = {
   decision_reason: "Initializing",
 };
 
-let paymentFetch: ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) | null =
-  null;
+let paymentFetch: typeof fetch | null = null;
 let paymentInspector: x402HTTPClient | null = null;
 let loopBusy = false;
 let lastTickMs = Date.now();
@@ -105,14 +104,10 @@ function pushEvent(event: AgentEvent): void {
   if (events.length > 100) {
     events.length = 100;
   }
-  // Mirror every event to the terminal so you can watch the agent live.
-  const icon =
-    event.type === "PAYMENT" ? "💸" :
-    event.type === "DECISION" ? "🤔" :
-    event.type === "ERROR" ? "⚠️ " : "·";
-  let line = `${icon} [${event.type}] ${event.message}`;
-  if (event.price_usdc !== undefined) line += `  ($${event.price_usdc.toFixed(3)})`;
-  if (event.tx_id) line += `\n     ↳ tx ${event.tx_id}\n     ↳ ${event.lora_url ?? `https://lora.algokit.io/testnet/tx/${event.tx_id}`}`;
+
+  let line = `[${event.type}] ${event.message}`;
+  if (event.price_usdc !== undefined) line += ` (${event.price_usdc.toFixed(3)})`;
+  if (event.tx_id) line += `\n  tx ${event.tx_id}\n  ${event.lora_url ?? `https://lora.algokit.io/testnet/tx/${event.tx_id}`}`;
   console.log(line);
 }
 
@@ -158,7 +153,7 @@ function applyDeliveryTick(): void {
 }
 
 async function fetchProducerStatus(): Promise<ProducerStatus> {
-  const response = await fetch(`${resourceServerUrl}/status`);
+  const response = await fetch(`${serverUrl}/status`);
   if (!response.ok) {
     throw new Error(`status fetch failed (${response.status})`);
   }
@@ -167,7 +162,7 @@ async function fetchProducerStatus(): Promise<ProducerStatus> {
 
 async function buyEnergy(kwh: number): Promise<BuyResponse> {
   if (!paymentFetch || !paymentInspector) {
-    throw new Error("AVM_MNEMONIC is not configured; agent can only observe state");
+    throw new Error("BUYER_MNEMONIC is not configured; agent can only observe state");
   }
 
   const response = await paymentFetch(`${buyUrl}?kwh=${kwh}`, { method: "GET" });
@@ -178,7 +173,6 @@ async function buyEnergy(kwh: number): Promise<BuyResponse> {
 
   const settle = paymentInspector.getPaymentSettleResponse(name => response.headers.get(name));
   const settleRecord = settle as Record<string, unknown> | null;
-  // Prefer the REAL on-chain settlement tx (the server no longer fabricates one).
   const txId =
     (settleRecord?.["transaction"] as string | undefined) ??
     (settleRecord?.["txId"] as string | undefined) ??
@@ -187,15 +181,13 @@ async function buyEnergy(kwh: number): Promise<BuyResponse> {
 
   return {
     ...body,
-    ...(txId
-      ? { tx_id: txId, lora_url: `https://lora.algokit.io/${loraNetworkPath}/tx/${txId}` }
-      : {}),
+    ...(txId ? { tx_id: txId, lora_url: `https://lora.algokit.io/${loraNetworkPath}/tx/${txId}` } : {}),
   };
 }
 
 async function reportPaymentToServer(result: BuyResponse): Promise<void> {
   try {
-    await fetch(`${resourceServerUrl}/report-payment`, {
+    await fetch(`${serverUrl}/report-payment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -212,7 +204,7 @@ async function reportPaymentToServer(result: BuyResponse): Promise<void> {
 }
 
 async function initPaymentClient(): Promise<void> {
-  if (!avmMnemonic || avmMnemonic.includes("PASTE")) {
+  if (!buyerMnemonic || buyerMnemonic.includes("PASTE")) {
     currentState = {
       ...currentState,
       decision_reason: "No mnemonic configured: running in observer mode",
@@ -220,7 +212,7 @@ async function initPaymentClient(): Promise<void> {
     return;
   }
 
-  const seed = seedFromMnemonic(avmMnemonic);
+  const seed = seedFromMnemonic(buyerMnemonic);
   const seedCopy = new Uint8Array(seed);
   const wrappedSeed: WrappedEd25519Seed = {
     unwrapEd25519Seed: async () => seed,
@@ -236,7 +228,7 @@ async function initPaymentClient(): Promise<void> {
   const client = new x402Client().register("algorand:*", new ExactAvmScheme(signer));
   paymentFetch = wrapFetchWithPayment(fetch, client);
   paymentInspector = new x402HTTPClient(client);
-  console.log(`🔌 Agent signer address: ${signer.address}`);
+  console.log(`Agent signer address: ${signer.address}`);
 }
 
 async function agentLoop(): Promise<void> {
@@ -354,10 +346,10 @@ setInterval(() => {
 
 serve({ fetch: app.fetch, port });
 
-console.log(`🤖 Consumer agent service listening at http://localhost:${port}`);
-console.log(`   server : ${resourceServerUrl}`);
-console.log(`   buy    : ${endpointPath}`);
-console.log(`   asset  : ${paymentSymbol}`);
-console.log(`   network: ${paymentNetwork}`);
-console.log(`   budget : ${budgetAmount.toFixed(2)} ${paymentSymbol}`);
-console.log(`   max px : ${maxPricePerKwh.toFixed(3)} ${paymentSymbol}/kWh`);
+console.log(`Consumer agent service listening at http://localhost:${port}`);
+console.log(`  server : ${serverUrl}`);
+console.log(`  buy    : ${endpointPath}`);
+console.log(`  asset  : ${paymentSymbol}`);
+console.log(`  network: ${paymentNetwork}`);
+console.log(`  budget : ${budgetAmount.toFixed(2)} ${paymentSymbol}`);
+console.log(`  max px : ${maxPricePerKwh.toFixed(3)} ${paymentSymbol}/kWh`);
