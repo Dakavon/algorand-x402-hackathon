@@ -141,6 +141,12 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            DELETE FROM readings WHERE ts < ?
+            """,
+            (time.time() - 1800,),
+        )
         conn.commit()
 
 
