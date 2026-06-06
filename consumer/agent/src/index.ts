@@ -95,6 +95,15 @@ function pushEvent(event: AgentEvent): void {
   if (events.length > 100) {
     events.length = 100;
   }
+  // Mirror every event to the terminal so you can watch the agent live.
+  const icon =
+    event.type === "PAYMENT" ? "💸" :
+    event.type === "DECISION" ? "🤔" :
+    event.type === "ERROR" ? "⚠️ " : "·";
+  let line = `${icon} [${event.type}] ${event.message}`;
+  if (event.price_usdc !== undefined) line += `  ($${event.price_usdc.toFixed(3)})`;
+  if (event.tx_id) line += `\n     ↳ tx ${event.tx_id}\n     ↳ ${event.lora_url ?? `https://lora.algokit.io/testnet/tx/${event.tx_id}`}`;
+  console.log(line);
 }
 
 function setState(nextState: AgentLifecycle, reason: string): void {
