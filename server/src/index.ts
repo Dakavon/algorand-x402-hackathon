@@ -76,13 +76,18 @@ type ApiErrorCode =
   | "INVALID_KWH"
   | "INTERNAL_ERROR";
 
+// Laptop-only simulation: when no Pi is connected, MOCK_EV_PLUGGED=true makes the
+// fallback producer behave like a live producer with the EV plugged in, so the agent
+// will autonomously buy on a loop. Has no effect once a real Pi is reachable (its
+// real /status overrides this cache). Remove/set false before relying on the Pi.
+const mockEvPlugged = process.env.MOCK_EV_PLUGGED === "true";
 const fallbackProducer: ProducerStatus = {
   ts: Date.now() / 1000,
-  solar_kw: 0,
+  solar_kw: mockEvPlugged ? 4.2 : 0,
   battery_kwh: 10,
   battery_pct: 1,
   price_per_kwh: Number(pricePerKwhUsd),
-  ev_plugged: false,
+  ev_plugged: mockEvPlugged,
   has_offer: true,
   stale: true,
 };
