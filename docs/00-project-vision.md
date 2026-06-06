@@ -2,8 +2,15 @@
 
 ## The pitch
 
-With **§42c EnWG** (German Energy Sharing law, in force 06/2026), households can now sell
-surplus (solar) electricity directly to neighbors. Today this is human-driven and slow.
+With **§42c EnWG** (German Energy Sharing law, in force **1 June 2026**), households can now share
+surplus (solar) electricity with neighbors in the same balancing area. Today this is human-driven
+and slow.
+
+> ⚖️ **Legal accuracy:** §42c is *joint use / sharing* (with a regulated remuneration arrangement),
+> **not** a free P2P sale market — and it *supplements* rather than replaces your existing supplier.
+> The "sell directly to your neighbor" tagline is a simplification; pitch our agents as the
+> **automation + on-chain settlement layer for the sharing remuneration**. Full detail +
+> safe pitch wording in [04-law-42c-enwg.md](04-law-42c-enwg.md).
 
 **Vision:** Fully autonomous, agent-driven energy trading between households.
 No intermediary, no utility middleman, no manual coordination.
