@@ -8,6 +8,8 @@ import threading
 import time
 from pathlib import Path
 
+import atexit
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -22,6 +24,16 @@ try:
 except (ImportError, OSError):
     _HAS_ADC = False
     _spi = None
+
+try:
+    import RPi.GPIO as GPIO
+
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(17, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+    _HAS_GPIO = True
+    atexit.register(GPIO.cleanup)
+except (ImportError, RuntimeError):
+    _HAS_GPIO = False
 
 ACCEL = float(os.getenv("ACCEL", "60"))
 PORT = int(os.getenv("PORT", "8001"))
@@ -70,16 +82,21 @@ class ProducerRuntime:
             return self._simulated_solar(time.time())
         return (raw / 1023.0) * 5.0
 
-    def _maybe_toggle_ev(self, now: float) -> None:
+    def _read_ev_gpio(self) -> bool:
+        if not _HAS_GPIO:
+            return self._ev_fallback(time.time())
+        return GPIO.input(17)
+
+    def _ev_fallback(self, now: float) -> bool:
         # Flip EV plugged state occasionally so the agent can enter/exit charging.
-        # Disabled when EV_AUTO_TOGGLE=false (stable EV for a controlled demo).
         if not EV_AUTO_TOGGLE:
-            return
+            return EV_PLUGGED_DEFAULT
         if now - self.last_toggle_ts < 12:
-            return
+            return self.ev_plugged
         self.last_toggle_ts = now
         if random.random() < 0.25:
-            self.ev_plugged = not self.ev_plugged
+            return not self.ev_plugged
+        return self.ev_plugged
 
     def tick(self) -> dict[str, float | bool]:
         with self.lock:
@@ -88,7 +105,7 @@ class ProducerRuntime:
             self.last_tick_ts = now
 
             self.solar_kw = self._solar_from_adc()
-            self._maybe_toggle_ev(now)
+            self.ev_plugged = self._read_ev_gpio()
 
             delta_kwh = (self.solar_kw - SELF_CONSUMPTION_KW) * (ACCEL * dt / 3600.0)
             self.battery_kwh = max(0.0, min(BATTERY_CAPACITY_KWH, self.battery_kwh + delta_kwh))
