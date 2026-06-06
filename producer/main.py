@@ -12,6 +12,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+try:
+    import spidev
+
+    _spi = spidev.SpiDev()
+    _spi.open(0, 0)
+    _spi.max_speed_hz = 1350000
+    _HAS_ADC = True
+except (ImportError, OSError):
+    _HAS_ADC = False
+    _spi = None
 
 ACCEL = float(os.getenv("ACCEL", "60"))
 PORT = int(os.getenv("PORT", "8001"))
@@ -34,12 +44,24 @@ class ProducerRuntime:
         self.ev_plugged = False
         self.solar_kw = 2.0
 
+    def _read_adc(self, channel: int = 0) -> int:
+        if not _HAS_ADC:
+            return -1
+        r = _spi.xfer2([1, (8 + channel) << 4, 0])
+        return ((r[1] & 3) << 8) + r[2]
+
     def _simulated_solar(self, now: float) -> float:
         # Smooth day-like wave plus small jitter for a live-looking chart.
         cycle = math.sin(((now - self.start_ts) / 30.0) * math.pi)
         base = 2.5 + 2.2 * cycle
         jitter = random.uniform(-0.2, 0.2)
         return max(0.0, min(5.0, base + jitter))
+
+    def _solar_from_adc(self) -> float:
+        raw = self._read_adc(0)
+        if raw < 0:
+            return self._simulated_solar(time.time())
+        return (raw / 1023.0) * 5.0
 
     def _maybe_toggle_ev(self, now: float) -> None:
         # Flip EV plugged state occasionally so the agent can enter/exit charging.
@@ -55,7 +77,7 @@ class ProducerRuntime:
             dt = max(0.05, now - self.last_tick_ts)
             self.last_tick_ts = now
 
-            self.solar_kw = self._simulated_solar(now)
+            self.solar_kw = self._solar_from_adc()
             self._maybe_toggle_ev(now)
 
             delta_kwh = (self.solar_kw - SELF_CONSUMPTION_KW) * (ACCEL * dt / 3600.0)
