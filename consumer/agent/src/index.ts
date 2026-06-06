@@ -1,17 +1,23 @@
 // Energy BUYER — autonomous EV agent (x402 client + state server).
 
 import { config } from "dotenv";
+import { pbkdf2Sync } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { x402Client, wrapFetchWithPayment, x402HTTPClient } from "@x402/fetch";
-import { toClientAvmSigner } from "@x402/avm";
+import { toClientAvmSigner, ALGOKIT_SIGNER } from "@x402/avm";
 import { ExactAvmScheme } from "@x402/avm/exact/client";
 import {
   ed25519SigningKeyFromWrappedSecret,
+  peikertXHdWalletGenerator,
   type WrappedEd25519Seed,
 } from "@algorandfoundation/algokit-utils/crypto";
 import { seedFromMnemonic } from "@algorandfoundation/algokit-utils/algo25";
+import {
+  generateAddressWithSigners,
+  decodeTransaction,
+} from "@algorandfoundation/algokit-utils/transact";
 
 config();
 
@@ -45,6 +51,13 @@ let purchaseMode: "fixed" | "metered" =
   (process.env.PURCHASE_MODE ?? "fixed").toLowerCase() === "metered" ? "metered" : "fixed";
 // Amount (kWh) a one-time fixed purchase grabs when the caller doesn't specify one.
 const fixedKwh = Math.max(0.001, Number(process.env.FIXED_KWH ?? 5));
+
+// Network for the explorer (Lora) links we print. The signing network is dictated by
+// the server's 402 response; this only affects URLs. For a mainnet test set
+// PAYMENT_NETWORK=mainnet AND point ALGOD_URL at a mainnet node (the suggested-params
+// genesis must match the settlement network).
+const loraNetworkPath =
+  (process.env.PAYMENT_NETWORK ?? "testnet").toLowerCase() === "mainnet" ? "mainnet" : "testnet";
 
 type AgentLifecycle = "IDLE" | "EVALUATING" | "PAYING" | "CHARGING" | "WAITING" | "ERROR";
 
@@ -126,7 +139,7 @@ function pushEvent(event: AgentEvent): void {
     event.type === "ERROR" ? "⚠️ " : "·";
   let line = `${icon} [${event.type}] ${event.message}`;
   if (event.price_usdc !== undefined) line += `  ($${event.price_usdc.toFixed(3)})`;
-  if (event.tx_id) line += `\n     ↳ tx ${event.tx_id}\n     ↳ ${event.lora_url ?? `https://lora.algokit.io/testnet/tx/${event.tx_id}`}`;
+  if (event.tx_id) line += `\n     ↳ tx ${event.tx_id}\n     ↳ ${event.lora_url ?? `https://lora.algokit.io/${loraNetworkPath}/tx/${event.tx_id}`}`;
   console.log(line);
 }
 
@@ -202,7 +215,7 @@ async function buyEnergy(kwh: number): Promise<BuyResponse> {
   return {
     ...body,
     ...(txId
-      ? { tx_id: txId, lora_url: `https://lora.algokit.io/testnet/tx/${txId}` }
+      ? { tx_id: txId, lora_url: `https://lora.algokit.io/${loraNetworkPath}/tx/${txId}` }
       : {}),
   };
 }
@@ -224,6 +237,33 @@ async function reportPaymentToServer(result: BuyResponse): Promise<void> {
   }
 }
 
+// Build a ClientAvmSigner from an HD-derived Ed25519 signing key. Mirrors @x402/avm's
+// toClientAvmSigner internals (which only accept a legacy base64 key), so a Pera 24-word
+// BIP-39 HD account can sign x402 payments. Verified on mainnet (EURD self-transfer).
+function clientAvmSignerFromHd(
+  signingKey: Parameters<typeof generateAddressWithSigners>[0],
+): ReturnType<typeof toClientAvmSigner> {
+  const algokitSigners = generateAddressWithSigners(signingKey);
+  const signer = {
+    address: algokitSigners.addr.toString(),
+    signTransactions: async (txns: Uint8Array[], indexesToSign?: number[]) =>
+      Promise.all(
+        txns.map(async (txn, i) => {
+          if (indexesToSign && !indexesToSign.includes(i)) return null;
+          const decoded = decodeTransaction(txn);
+          const signed = await algokitSigners.signer([decoded], [0]);
+          return signed[0] ?? null;
+        }),
+      ),
+  };
+  Object.defineProperty(signer, ALGOKIT_SIGNER, {
+    value: algokitSigners,
+    enumerable: false,
+    writable: false,
+  });
+  return signer as ReturnType<typeof toClientAvmSigner>;
+}
+
 async function initPaymentClient(): Promise<void> {
   if (!avmMnemonic || avmMnemonic.includes("PASTE")) {
     currentState = {
@@ -233,24 +273,49 @@ async function initPaymentClient(): Promise<void> {
     return;
   }
 
-  const seed = seedFromMnemonic(avmMnemonic);
-  const seedCopy = new Uint8Array(seed);
-  const wrappedSeed: WrappedEd25519Seed = {
-    unwrapEd25519Seed: async () => seed,
-    wrapEd25519Seed: async () => {},
-  };
-  const wrappedSecret = await ed25519SigningKeyFromWrappedSecret(wrappedSeed);
-  const secretKey = Buffer.concat([
-    Buffer.from(seedCopy),
-    Buffer.from(wrappedSecret.ed25519Pubkey),
-  ]).toString("base64");
+  // Support both wallet formats: 24-word Pera HD (BIP-39) and legacy 25-word Algorand.
+  const words = avmMnemonic.trim().split(/\s+/).filter(Boolean);
+  let signer: ReturnType<typeof toClientAvmSigner>;
+  let signerKind: string;
 
-  const signer = toClientAvmSigner(secretKey);
+  if (words.length === 24) {
+    // Pera HD / BIP-39: PBKDF2 seed -> peikertX HD derivation. Account/index default to
+    // 0/0 (Pera's first account); override with HD_ACCOUNT / HD_INDEX if needed.
+    const hdAccount = Number(process.env.HD_ACCOUNT ?? 0);
+    const hdIndex = Number(process.env.HD_INDEX ?? 0);
+    const seed64 = new Uint8Array(
+      pbkdf2Sync(avmMnemonic.trim().normalize("NFKD"), "mnemonic", 2048, 64, "sha512"),
+    );
+    const { accountGenerator } = await peikertXHdWalletGenerator(seed64);
+    signer = clientAvmSignerFromHd(await accountGenerator(hdAccount, hdIndex));
+    signerKind = `Pera HD 24-word (account ${hdAccount}/${hdIndex})`;
+  } else if (words.length === 25) {
+    // Legacy single-account 25-word Algorand mnemonic.
+    const seed = seedFromMnemonic(avmMnemonic);
+    const seedCopy = new Uint8Array(seed);
+    const wrappedSeed: WrappedEd25519Seed = {
+      unwrapEd25519Seed: async () => seed,
+      wrapEd25519Seed: async () => {},
+    };
+    const wrappedSecret = await ed25519SigningKeyFromWrappedSecret(wrappedSeed);
+    const secretKey = Buffer.concat([
+      Buffer.from(seedCopy),
+      Buffer.from(wrappedSecret.ed25519Pubkey),
+    ]).toString("base64");
+    signer = toClientAvmSigner(secretKey);
+    signerKind = "legacy 25-word";
+  } else {
+    throw new Error(
+      `AVM_MNEMONIC must be 24 words (Pera HD/BIP-39) or 25 words (legacy Algorand), got ${words.length}`,
+    );
+  }
+
   const schemeConfig = algodUrl ? { algodUrl, algodToken } : undefined;
   const client = new x402Client().register("algorand:*", new ExactAvmScheme(signer, schemeConfig));
   paymentFetch = wrapFetchWithPayment(fetch, client);
   paymentInspector = new x402HTTPClient(client);
-  console.log(`🔌 Agent signer address: ${signer.address}`);
+  console.log(`🔌 Agent signer address: ${signer.address}  [${signerKind}]`);
+  console.log(`   network: ${loraNetworkPath === "mainnet" ? "⚠️  MAINNET (REAL FUNDS)" : "TestNet"}`);
   console.log(`   algod : ${algodUrl ?? "(default public AlgoNode — may rate-limit; set ALGOD_URL)"}`);
 }
 

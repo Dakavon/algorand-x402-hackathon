@@ -16,13 +16,30 @@ import { join } from "node:path";
 
 config();
 
-// Algorand TestNet network id (CAIP-2), provided by the organizers.
-const NETWORK = "algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=" as const;
+// Algorand network ids (CAIP-2). Default TestNet; set PAYMENT_NETWORK=mainnet in .env
+// to settle on MainNet (real USDC, ASA 31566704 — auto-selected by @x402/avm per network).
+const ALGORAND_TESTNET_CAIP2 = "algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=" as const;
+const ALGORAND_MAINNET_CAIP2 = "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=" as const;
+const NETWORK =
+  (process.env.PAYMENT_NETWORK ?? "testnet").toLowerCase() === "mainnet"
+    ? ALGORAND_MAINNET_CAIP2
+    : ALGORAND_TESTNET_CAIP2;
 
 const avmAddress = process.env.AVM_ADDRESS;
 const facilitatorUrl = process.env.FACILITATOR_URL;
 const port = Number(process.env.PORT ?? 4021);
 const pricePerKwhUsd = process.env.PRICE_PER_KWH_USD ?? "0.01";
+// Payment asset. Defaults to USDC for the network; override for a custom ASA (e.g. EURD).
+// The `price` ("$X") is interpreted in THIS asset's units, using these decimals.
+const isMainnetNet = NETWORK === ALGORAND_MAINNET_CAIP2;
+const networkUsdcId = isMainnetNet ? "31566704" : "10458941";
+const paymentAssetId = process.env.PAYMENT_ASSET_ID ?? networkUsdcId;
+const paymentAssetDecimals = Number(process.env.PAYMENT_ASSET_DECIMALS ?? 6);
+const paymentAssetSymbol = process.env.PAYMENT_ASSET_SYMBOL ?? "USDC";
+// "$X" prices always resolve to USDC. A custom ASA (EURD/EURQ) must be priced as
+// { amount: <atomic units>, asset: <asa id> }. Atomic = price * 10^decimals.
+const usesCustomAsset = paymentAssetId !== networkUsdcId;
+const priceAtomicUnits = String(Math.round(Number(pricePerKwhUsd) * 10 ** paymentAssetDecimals));
 const producerUrl = process.env.PI_URL ?? "http://localhost:8001";
 const agentUrl = process.env.AGENT_URL ?? "http://localhost:4022";
 const KWH_PER_PURCHASE = 1;
@@ -276,7 +293,10 @@ const facilitatorClient = new HTTPFacilitatorClient({ url: facilitatorUrl });
 const accepts = [
   {
     scheme: "exact",
-    price: `$${pricePerKwhUsd}`,
+    // USDC route: "$X" auto-maps to USDC. Custom ASA (EURD): explicit { amount, asset }.
+    price: usesCustomAsset
+      ? { amount: priceAtomicUnits, asset: paymentAssetId }
+      : `$${pricePerKwhUsd}`,
     network: NETWORK,
     payTo: avmAddress,
   },
@@ -517,6 +537,8 @@ setInterval(() => {
 serve({ fetch: app.fetch, port });
 
 console.log(`⚡ Energy seller (x402 server) listening at http://localhost:${port}`);
+console.log(`   network: ${isMainnetNet ? "⚠️  MAINNET (REAL FUNDS)" : "TestNet"}`);
+console.log(`   asset  : ${paymentAssetSymbol} (ASA ${paymentAssetId}, ${paymentAssetDecimals} dp)`);
 console.log(`   pay-to : ${avmAddress}`);
-console.log(`   price  : $${pricePerKwhUsd}/kWh`);
+console.log(`   price  : $${pricePerKwhUsd}/kWh (in ${paymentAssetSymbol})`);
 console.log(`   facil. : ${facilitatorUrl}`);
