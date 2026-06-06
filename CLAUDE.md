@@ -66,6 +66,11 @@ and `docs/` add hackathon context, strategy, and a task distillation the repo do
 
 ## Status
 
-Architecture & build plan locked (from team repo). No code written yet.
-**Next step:** Phase 1 — generate + fund two TestNet accounts, opt into USDC, create `.env` files.
-**First milestone:** one agent buys 1 kWh with a real settled USDC tx on TestNet (laptop mock mode).
+✅ **Phase 0 complete** — an autonomous agent bought 1 kWh and settled a **real USDC payment on
+Algorand TestNet** (laptop, mock; no Pi yet).
+- Settled tx: `NL2FAXW72GC2BBBCM3D2T5DAHDBN36IY3L6JLLJ66SJOATXXPH2A`
+  (buyer −0.01 / seller +0.01 USDC, verified on-chain).
+- Reproduce: see [RUN.md](RUN.md). Code in `server/` (seller) + `consumer/agent/` (buyer).
+
+**Next:** Phase 2 (still local) — dynamic per-kWh pricing + mock producer state (solar/battery) +
+agent state machine (IDLE→EVAL→PAY→CHARGING) + budget cap + re-buy loop. Then dashboard, then Pi.
