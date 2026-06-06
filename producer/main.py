@@ -43,7 +43,7 @@ ACCEL = float(os.getenv("ACCEL", "60"))
 PORT = int(os.getenv("PORT", "8001"))
 # Bigger default pack so a one-time "fixed" purchase (e.g. 5 kWh) is deliverable in a
 # single transaction. Both are env-tunable for the real Pi / different demos.
-BATTERY_CAPACITY_KWH = float(os.getenv("BATTERY_CAPACITY_KWH", "20"))
+BATTERY_CAPACITY_KWH = float(os.getenv("BATTERY_CAPACITY_KWH", "10"))
 BATTERY_INITIAL_KWH = min(BATTERY_CAPACITY_KWH, float(os.getenv("BATTERY_INITIAL_KWH", "15")))
 SELF_CONSUMPTION_KW = 1.0
 # EV control. For a controlled fixed-mode demo, set EV_AUTO_TOGGLE=false and
@@ -90,7 +90,7 @@ class ProducerRuntime:
     def _read_ev_gpio(self) -> bool:
         if not _HAS_GPIO:
             return self._ev_fallback(time.time())
-        return GPIO.input(17)
+        return bool(GPIO.input(17))
 
     def _ev_fallback(self, now: float) -> bool:
         # Flip EV plugged state occasionally so the agent can enter/exit charging.
@@ -132,7 +132,7 @@ class ProducerRuntime:
         battery_pct = 0.0 if BATTERY_CAPACITY_KWH == 0 else self.battery_kwh / BATTERY_CAPACITY_KWH
         price = max(0.01, 0.30 - (battery_pct * 0.15) - (self.solar_kw * 0.02))
         return {
-            "ts": time.time(),
+            "ts": int(time.time()),
             "solar_kw": round(self.solar_kw, 3),
             "battery_kwh": round(self.battery_kwh, 3),
             "battery_pct": round(battery_pct, 3),
