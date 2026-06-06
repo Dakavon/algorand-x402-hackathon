@@ -71,7 +71,7 @@ producer** (no discovery / no multi-neighbor comparison) — see MVP scope below
 - One Producer service (Pi/FastAPI) + one x402 server (Hono) + one autonomous Consumer Agent.
 - Turn the potentiometer → solar rises → price drops → agent decides to buy.
 - A real, settled **x402 USDC payment** on Algorand TestNet per purchase, visible on Lora.
-- A live Streamlit dashboard: solar/battery/price gauges, sawtooth battery chart, payment log.
+- A live React dashboard: solar/battery/price gauges, sawtooth battery chart, payment log.
 
 **Should have:**
 - Dynamic pricing tied to surplus (full battery + strong sun → cheapest).
@@ -98,7 +98,7 @@ Follow the 6 phases in [06-build-plan-and-tasks.md](06-build-plan-and-tasks.md):
 2. **First milestone:** agent buys 1 kWh from the server with a **real settled USDC tx** — in
    laptop **mock mode** (no Pi needed). This is the minimum viable demo; everything layers on it.
 3. **Phases 2–4** — Producer (Pi) + Hono x402 server + Consumer Agent, in parallel via mock data.
-4. **Phase 5** — Streamlit dashboard with Lora explorer links.
+4. **Phase 5** — React dashboard with Lora explorer links.
 5. Add **one** bonus-track / "serious" feature (EURQ or ARC-58 spend cap) for differentiation.
 6. **Phase 6 + last 4–5 hours** — integration, 3× clean dry runs, backup recording, pitch rehearsal.
 

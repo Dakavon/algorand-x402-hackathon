@@ -20,6 +20,12 @@ payments.jsonl
 *.sqlite3
 *.db
 
+# Local media
+*.jpg
+*.jpeg
+*.JPG
+*.JPEG
+
 # Tooling / local
 .claude/
 .DS_Store

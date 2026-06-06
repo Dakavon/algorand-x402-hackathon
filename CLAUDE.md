@@ -16,9 +16,10 @@ Your EV autonomously buys cheap surplus solar from your neighbor, pays instantly
 
 ## Team
 
-5 people. At least **one member must be fully on-site** to present the final pitch.
+4 people. At least **one member must be fully on-site** to present the final pitch.
 ⚠️ Note: the build plan in the repo (`plan.md`) was written for **2 people** — see
-[docs/06-build-plan-and-tasks.md](docs/06-build-plan-and-tasks.md) for how to deploy the other 3.
+[docs/team-operating-model.md](docs/team-operating-model.md) for current ownership and
+[docs/06-build-plan-and-tasks.md](docs/06-build-plan-and-tasks.md) for the original phase checklist.
 
 ## Source of truth
 
@@ -46,7 +47,7 @@ and `docs/` add hackathon context, strategy, and a task distillation the repo do
   battery sim, dynamic pricing, SQLite. Mock fallback for laptop-only dev.
 - **x402 Server:** Laptop — TypeScript/Hono (:4021). Custom x402 handler wraps `/energy/buy`.
 - **Consumer Agent:** Laptop — TypeScript (:4022). State machine buyer (IDLE→EVAL→PAY→CHARGING).
-- **Dashboard:** Laptop — Python/Streamlit (:8501). Gauges, charts, payment log w/ Lora links.
+- **Dashboard:** Laptop — React/Vite (:5173). Gauges, charts, payment log w/ Lora links.
 - **Payments:** x402 (`@x402/avm`, `@x402/fetch`, `@x402/hono`), GoPlausible facilitator,
   **USDC TestNet (ASA `10458941`)**; EURQ as a bonus add-on.
 - **Tooling:** AlgoKit / algokey, Lora explorer + faucet, Circle USDC faucet.
@@ -59,11 +60,17 @@ and `docs/` add hackathon context, strategy, and a task distillation the repo do
 | [docs/01-hackathon-rules.md](docs/01-hackathon-rules.md) | Rules, tracks, prizes, timeline, submission |
 | [docs/02-resources.md](docs/02-resources.md) | All official docs, SDKs, templates, tools, faucets |
 | [docs/03-x402-and-agentic-commerce.md](docs/03-x402-and-agentic-commerce.md) | x402 flow, agentic commerce concepts, Bazaar, ARCs, security |
-| [docs/04-law-42c-enwg.md](docs/04-law-42c-enwg.md) | The §42c EnWG legal basis (⚠️ verify against official text) |
+| [docs/04-law-42c-enwg.md](docs/04-law-42c-enwg.md) | Verified §42c EnWG legal basis and safe pitch framing |
 | [docs/05-strategy-and-landscape.md](docs/05-strategy-and-landscape.md) | Prior winners, differentiation, demo & pitch strategy |
-| [docs/06-build-plan-and-tasks.md](docs/06-build-plan-and-tasks.md) | **Concrete architecture, constants, 6-phase task checklist, 5-person split** |
+| [docs/06-build-plan-and-tasks.md](docs/06-build-plan-and-tasks.md) | **Concrete architecture, constants, 6-phase task checklist** |
 | [docs/07-prephase-setup-and-mock-plan.md](docs/07-prephase-setup-and-mock-plan.md) | **Pre-phase: wallet setup, roles, verified SDK, local mock-payment milestone (share this)** |
 | [docs/08-transaction-flow-explained.md](docs/08-transaction-flow-explained.md) | **End-to-end flow: accounts layer vs x402 protocol layer, the 402 handshake, code provenance** |
+| [docs/backend-design-spec.md](docs/backend-design-spec.md) | Backend service contracts and dashboard API endpoints |
+| [docs/frontend-react-design-spec.md](docs/frontend-react-design-spec.md) | React dashboard ownership, layout, components, and data needs |
+| [docs/system-design.md](docs/system-design.md) | System architecture, payment flow, boundaries, future product shape |
+| [docs/team-operating-model.md](docs/team-operating-model.md) | 4-person ownership, capability cards, coordination cadence |
+| [docs/research-brief.md](docs/research-brief.md) | Assigned market, legal, and competitive research workstream |
+| [specs/constitution.md](specs/constitution.md) | Project constitution, scope rules, decision rules, pitch rules |
 
 ## Status
 
