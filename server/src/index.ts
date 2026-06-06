@@ -107,7 +107,7 @@ const fallbackProducer: ProducerStatus = {
 // the no-Pi fallback producer; a live Pi's fresh /status still overrides them.
 const simControl = {
   ev_plugged: mockEvPlugged,
-  price_per_kwh: Number(pricePerKwhUsd),
+  price_per_kwh: Number(pricePerKwh),
 };
 
 const fallbackAgent: AgentState = {

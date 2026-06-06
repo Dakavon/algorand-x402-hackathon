@@ -8,6 +8,8 @@ import threading
 import time
 from pathlib import Path
 
+import atexit
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -23,11 +25,25 @@ except (ImportError, OSError):
     _HAS_ADC = False
     _spi = None
 
+LED_PIN = 27
+CHARGING_LED_SECONDS = float(os.getenv("CHARGING_LED_SECONDS", "5"))
+
+try:
+    import RPi.GPIO as GPIO
+
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(17, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+    GPIO.setup(LED_PIN, GPIO.OUT, initial=GPIO.LOW)
+    _HAS_GPIO = True
+    atexit.register(GPIO.cleanup)
+except (ImportError, RuntimeError):
+    _HAS_GPIO = False
+
 ACCEL = float(os.getenv("ACCEL", "60"))
 PORT = int(os.getenv("PORT", "8001"))
 # Bigger default pack so a one-time "fixed" purchase (e.g. 5 kWh) is deliverable in a
 # single transaction. Both are env-tunable for the real Pi / different demos.
-BATTERY_CAPACITY_KWH = float(os.getenv("BATTERY_CAPACITY_KWH", "20"))
+BATTERY_CAPACITY_KWH = float(os.getenv("BATTERY_CAPACITY_KWH", "10"))
 BATTERY_INITIAL_KWH = min(BATTERY_CAPACITY_KWH, float(os.getenv("BATTERY_INITIAL_KWH", "15")))
 SELF_CONSUMPTION_KW = 1.0
 # EV control. For a controlled fixed-mode demo, set EV_AUTO_TOGGLE=false and
@@ -50,6 +66,7 @@ class ProducerRuntime:
         self.battery_kwh = BATTERY_INITIAL_KWH
         self.ev_plugged = EV_PLUGGED_DEFAULT
         self.solar_kw = 2.0
+        self._charging_until = 0.0
 
     def _read_adc(self, channel: int = 0) -> int:
         if not _HAS_ADC:
@@ -70,16 +87,31 @@ class ProducerRuntime:
             return self._simulated_solar(time.time())
         return (raw / 1023.0) * 5.0
 
-    def _maybe_toggle_ev(self, now: float) -> None:
+    def _read_ev_gpio(self) -> bool:
+        if not _HAS_GPIO:
+            return self._ev_fallback(time.time())
+        return bool(GPIO.input(17))
+
+    def _ev_fallback(self, now: float) -> bool:
         # Flip EV plugged state occasionally so the agent can enter/exit charging.
-        # Disabled when EV_AUTO_TOGGLE=false (stable EV for a controlled demo).
         if not EV_AUTO_TOGGLE:
-            return
+            return EV_PLUGGED_DEFAULT
         if now - self.last_toggle_ts < 12:
-            return
+            return self.ev_plugged
         self.last_toggle_ts = now
         if random.random() < 0.25:
-            self.ev_plugged = not self.ev_plugged
+            return not self.ev_plugged
+        return self.ev_plugged
+
+    @staticmethod
+    def _set_led(on: bool) -> None:
+        if _HAS_GPIO:
+            GPIO.output(LED_PIN, GPIO.HIGH if on else GPIO.LOW)
+
+    def _update_led(self) -> None:
+        now = time.time()
+        on = now < self._charging_until
+        self._set_led(on)
 
     def tick(self) -> dict[str, float | bool]:
         with self.lock:
@@ -87,8 +119,9 @@ class ProducerRuntime:
             dt = max(0.05, now - self.last_tick_ts)
             self.last_tick_ts = now
 
+            self._update_led()
             self.solar_kw = self._solar_from_adc()
-            self._maybe_toggle_ev(now)
+            self.ev_plugged = self._read_ev_gpio()
 
             delta_kwh = (self.solar_kw - SELF_CONSUMPTION_KW) * (ACCEL * dt / 3600.0)
             self.battery_kwh = max(0.0, min(BATTERY_CAPACITY_KWH, self.battery_kwh + delta_kwh))
@@ -99,7 +132,7 @@ class ProducerRuntime:
         battery_pct = 0.0 if BATTERY_CAPACITY_KWH == 0 else self.battery_kwh / BATTERY_CAPACITY_KWH
         price = max(0.01, 0.30 - (battery_pct * 0.15) - (self.solar_kw * 0.02))
         return {
-            "ts": time.time(),
+            "ts": int(time.time()),
             "solar_kw": round(self.solar_kw, 3),
             "battery_kwh": round(self.battery_kwh, 3),
             "battery_pct": round(battery_pct, 3),
@@ -116,6 +149,8 @@ class ProducerRuntime:
                 raise ValueError("insufficient_battery")
             self.battery_kwh -= kwh
             self.battery_kwh = max(0.0, self.battery_kwh)
+            self._charging_until = max(self._charging_until, time.time() + CHARGING_LED_SECONDS)
+            self._set_led(True)
             battery_pct = 0.0 if BATTERY_CAPACITY_KWH == 0 else self.battery_kwh / BATTERY_CAPACITY_KWH
             return {
                 "battery_kwh": round(self.battery_kwh, 3),
@@ -140,6 +175,12 @@ def init_db() -> None:
               ev_plugged INTEGER NOT NULL
             )
             """
+        )
+        conn.execute(
+            """
+            DELETE FROM readings WHERE ts < ?
+            """,
+            (time.time() - 1800,),
         )
         conn.commit()
 
