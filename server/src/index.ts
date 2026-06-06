@@ -40,11 +40,13 @@ type ProducerStatus = {
   price_per_kwh: number;
   ev_plugged: boolean;
   has_offer: boolean;
+  available_kwh?: number;
   stale?: boolean;
 };
 
 type AgentState = {
   state: "IDLE" | "EVALUATING" | "PAYING" | "CHARGING" | "WAITING" | "ERROR";
+  mode?: "fixed" | "metered";
   delivery_remaining_kwh: number;
   budget_remaining_usdc: number;
   max_price_per_kwh: number;
@@ -90,6 +92,7 @@ const fallbackProducer: ProducerStatus = {
   price_per_kwh: Number(pricePerKwhUsd),
   ev_plugged: mockEvPlugged,
   has_offer: true,
+  available_kwh: 10,
   stale: true,
 };
 
@@ -394,11 +397,27 @@ app.post("/control/ev", async c => {
   return c.json({ ok: true, ev_plugged: simControl.ev_plugged });
 });
 
-// Fire one immediate purchase (manual buy-one).
+// Fire one immediate purchase (manual buy-one). In fixed mode, omit kwh to buy the
+// agent's configured one-time amount; pass kwh to let the user pick how much to buy.
 app.post("/control/buy", async c => {
   const body = (await c.req.json().catch(() => ({}))) as { kwh?: number };
   const ok = await postAgentJson("/buy-now", { kwh: body.kwh });
   return c.json({ ok });
+});
+
+// Switch the agent's purchase mode: "fixed" (one-time, default) <-> "metered" (loop).
+app.post("/control/mode", async c => {
+  const body = (await c.req.json().catch(() => ({}))) as { mode?: string };
+  if (body.mode !== "fixed" && body.mode !== "metered") {
+    return c.json(apiError("INVALID_KWH", "mode must be 'fixed' or 'metered'", false), 400);
+  }
+  const ok = await postAgentJson("/mode", { mode: body.mode });
+  addEvent({
+    ts: nowSeconds(),
+    type: "DECISION",
+    message: `Purchase mode set to ${body.mode} from dashboard`,
+  });
+  return c.json({ ok, mode: body.mode });
 });
 
 // Live knobs: per-kWh price (producer) + budget / max-price policy (agent).

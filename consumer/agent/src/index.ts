@@ -36,6 +36,16 @@ const algodToken = process.env.ALGOD_TOKEN ?? "";
 // How many times to retry a purchase when the node is transiently throttling (403/429/5xx).
 const buyRetries = Math.max(1, Number(process.env.BUY_RETRIES ?? 4));
 
+// Purchase mode:
+//   "fixed"   (default) — buy a user-selected amount in ONE payment, then go IDLE.
+//                         Few transactions; safest for rate-limited nodes & mainnet.
+//   "metered" — autonomous re-buy loop: keep buying small chunks as energy is used.
+// Switchable live via POST /mode (and the server's POST /control/mode).
+let purchaseMode: "fixed" | "metered" =
+  (process.env.PURCHASE_MODE ?? "fixed").toLowerCase() === "metered" ? "metered" : "fixed";
+// Amount (kWh) a one-time fixed purchase grabs when the caller doesn't specify one.
+const fixedKwh = Math.max(0.001, Number(process.env.FIXED_KWH ?? 5));
+
 type AgentLifecycle = "IDLE" | "EVALUATING" | "PAYING" | "CHARGING" | "WAITING" | "ERROR";
 
 type ProducerStatus = {
@@ -46,11 +56,13 @@ type ProducerStatus = {
   price_per_kwh: number;
   ev_plugged: boolean;
   has_offer: boolean;
+  available_kwh?: number;
   stale?: boolean;
 };
 
 type AgentState = {
   state: AgentLifecycle;
+  mode: "fixed" | "metered";
   solar_kw: number;
   battery_pct: number;
   price_per_kwh: number;
@@ -81,6 +93,7 @@ type BuyResponse = {
 const events: AgentEvent[] = [];
 let currentState: AgentState = {
   state: "IDLE",
+  mode: purchaseMode,
   solar_kw: 0,
   battery_pct: 0,
   price_per_kwh: 0,
@@ -333,6 +346,14 @@ async function agentLoop(): Promise<void> {
       return;
     }
 
+    // Fixed (one-time) mode never auto-buys. The user selects an amount and pays once
+    // via /buy-now (server /control/buy); the agent then charges and returns here IDLE,
+    // waiting for the next explicit request. Only "metered" mode runs the re-buy loop.
+    if (purchaseMode === "fixed") {
+      setState("IDLE", "Fixed mode: waiting for a purchase request");
+      return;
+    }
+
     if (!producer.has_offer) {
       setState("WAITING", "No producer offer available");
       return;
@@ -394,7 +415,10 @@ app.get("/events", c => {
 // --- Control plane (called by the server's /control/* endpoints) ---
 app.post("/buy-now", async c => {
   const body = (await c.req.json().catch(() => ({}))) as { kwh?: number };
-  const kwh = typeof body.kwh === "number" && body.kwh > 0 ? body.kwh : kwhPerPurchase;
+  // In fixed mode a bare /buy-now grabs the configured one-time amount; in metered
+  // mode it falls back to the small per-chunk size used by the loop.
+  const defaultKwh = purchaseMode === "fixed" ? fixedKwh : kwhPerPurchase;
+  const kwh = typeof body.kwh === "number" && body.kwh > 0 ? body.kwh : defaultKwh;
   if (loopBusy) return c.json({ ok: false, error: "agent busy" }, 409);
   loopBusy = true;
   try {
@@ -407,6 +431,23 @@ app.post("/buy-now", async c => {
   } finally {
     loopBusy = false;
   }
+});
+
+// Switch purchase mode live (fixed one-time <-> metered loop).
+app.post("/mode", async c => {
+  const body = (await c.req.json().catch(() => ({}))) as { mode?: string };
+  if (body.mode === "fixed" || body.mode === "metered") {
+    if (purchaseMode !== body.mode) {
+      purchaseMode = body.mode;
+      currentState = { ...currentState, mode: purchaseMode };
+      pushEvent({
+        ts: nowSeconds(),
+        type: "DECISION",
+        message: `Purchase mode -> ${purchaseMode}${purchaseMode === "fixed" ? ` (one-time ${fixedKwh.toFixed(2)} kWh)` : " (pay-as-you-use loop)"}`,
+      });
+    }
+  }
+  return c.json({ ok: true, mode: purchaseMode, fixed_kwh: fixedKwh });
 });
 
 app.post("/config", async c => {
@@ -439,6 +480,7 @@ app.post("/reset", async c => {
   events.length = 0;
   currentState = {
     state: "IDLE",
+    mode: purchaseMode,
     solar_kw: 0,
     battery_pct: 0,
     price_per_kwh: 0,
@@ -463,3 +505,6 @@ console.log(`   server : ${resourceServerUrl}`);
 console.log(`   buy    : ${endpointPath}`);
 console.log(`   budget : ${budgetUsd.toFixed(2)} USDC`);
 console.log(`   max px : ${maxPricePerKwh.toFixed(3)} USDC/kWh`);
+console.log(
+  `   mode   : ${purchaseMode}${purchaseMode === "fixed" ? ` (one-time ${fixedKwh.toFixed(2)} kWh per buy — no auto-rebuy)` : " (pay-as-you-use loop)"}`,
+);
