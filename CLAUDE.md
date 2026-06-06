@@ -62,6 +62,7 @@ and `docs/` add hackathon context, strategy, and a task distillation the repo do
 | [docs/04-law-42c-enwg.md](docs/04-law-42c-enwg.md) | The §42c EnWG legal basis (⚠️ verify against official text) |
 | [docs/05-strategy-and-landscape.md](docs/05-strategy-and-landscape.md) | Prior winners, differentiation, demo & pitch strategy |
 | [docs/06-build-plan-and-tasks.md](docs/06-build-plan-and-tasks.md) | **Concrete architecture, constants, 6-phase task checklist, 5-person split** |
+| [docs/07-prephase-setup-and-mock-plan.md](docs/07-prephase-setup-and-mock-plan.md) | **Pre-phase: wallet setup, roles, verified SDK, local mock-payment milestone (share this)** |
 
 ## Status
 
