@@ -29,8 +29,9 @@ This is the key question. The statute explicitly permits it:
   Nutzung).
 
 ➡️ So "selling surplus from your renewable-charged battery to neighbors, paid per kWh" is **within
-§42c** — provided the conditions below hold. (My earlier note that said "not a sale / participants
-don't sell power" was **wrong** — there *is* an explicit per-kWh `entgeltliche Gegenleistung`.)
+§42c** — provided the conditions below hold. The important correction is that there *is* an explicit
+per-kWh `entgeltliche Gegenleistung`; the limit is that this remains regulated energy sharing, not
+an open spot market.
 
 ## The real constraints (what actually limits you)
 

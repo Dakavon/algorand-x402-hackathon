@@ -89,16 +89,16 @@ From the official ideas doc, our project demonstrates several listed items at on
 | Filed under "cute demo" | Lead with the law + product framing; show real on-chain TXs; add the ARC-58 security beat |
 | Over-scoping (5 bonus tracks) | Organizers explicitly prefer focus. Ship core happy-path first; add **at most one** bonus integration |
 | Payments don't settle live on stage | Pre-fund wallets; rehearse on TestNet; have a recorded fallback clip |
-| Legal overclaiming | Reference §42c as motivation only; verify any specific claim against the official text |
+| Legal overclaiming | Use the verified §42c framing in `docs/04-law-42c-enwg.md`; avoid open-market or utility-replacement claims |
 
-## Recommended team split (5 people)
+## Recommended team split (4 people)
 
-1. **World / frontend** — dashboard + transaction ticker with explorer links.
-2. **Merchant / seller** — energy-selling x402 endpoint(s) + dynamic pricing (+ Bazaar reg if time).
-3. **Agent brains** — buyer (EV) + seller LLM loops: perceive → discover → decide → pay via x402.
-4. **Bonus economy** — EURQ payment asset, or Folks xALGO yield, or Alpha Arcade forward market
-   (in that order of effort). Pick **one** first.
-5. **Floater** — integration glue, the ARC-58 "rogue agent blocked" set piece, and the pitch.
+| Area | Owner | Purpose |
+|---|---|---|
+| Producer/house + x402 lead | N | Pi/FastAPI house emulator and initial x402 payment path. |
+| Coordination + x402 understudy | B | Integration order, env readiness, tradeoffs, and N bus-factor reduction. |
+| Dashboard/demo UX | S | Live state, charts, payment ticker, and Lora explorer links. |
+| Agent intelligence + research | J | Explainable consumer-agent behavior and market/legal differentiation research. |
 
 **First milestone for everyone to rally around:** one EV agent buys one energy increment from one
 seller with a **real settled TestNet transaction**. Everything else layers on that.

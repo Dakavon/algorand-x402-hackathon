@@ -122,57 +122,57 @@ when `<= 0`, agent may buy again.
 
 ## Build phases (task checklist)
 
-> Time estimates are from the 2-person plan. With 5 people, several phases overlap — see
-> "Team of 5 adaptation" below.
+> Time estimates are from the 2-person plan. With 4 people, several phases overlap — see
+> "Team of 4 adaptation" below and [team-operating-model.md](team-operating-model.md).
 
 ### Phase 1 — Accounts & Testnet setup (~1h, together)
-- [ ] Generate two keypairs (`algokey generate`): seller (producer) + buyer (consumer).
-- [ ] Fund both with ≥ 0.5 testnet ALGO (https://lora.algokit.io/testnet/fund).
-- [ ] Opt both into USDC: `algokit task opt-in --asset 10458941 --account <ADDR> --network testnet`.
-- [ ] Fund both with ~20 testnet USDC (https://faucet.circle.com → Algorand Testnet). **Pre-fund early** (rate limit 1 req/2h).
-- [ ] Verify balances on Lora; create the three `.env` files.
+- [ ] **Owner: B, support: N.** Generate two keypairs (`algokey generate`): seller (producer) + buyer (consumer).
+- [ ] **Owner: B, support: N.** Fund both with ≥ 0.5 testnet ALGO (https://lora.algokit.io/testnet/fund).
+- [ ] **Owner: B, support: N.** Opt both into USDC: `algokit task opt-in --asset 10458941 --account <ADDR> --network testnet`.
+- [ ] **Owner: B, support: N.** Fund both with ~20 testnet USDC (https://faucet.circle.com → Algorand Testnet). **Pre-fund early** (rate limit 1 req/2h).
+- [ ] **Owner: B, support: N.** Verify balances on Lora; create the three `.env` files.
 - **Done when:** both accounts show ALGO + USDC on Lora; `.env` files exist.
 
 ### Phase 2 — Producer service (Python/Pi, ~6h)
-- [ ] FastAPI on :8001. Endpoints: `GET /status`, `GET /history?minutes=5`, `POST /consume {kwh}`.
-- [ ] Hardware layer: MCP3008 ADC ch0 → 0–5 kW; GPIO17 → ev_plugged; moving average (5 reads).
-- [ ] Mock fallback when `spidev` import fails (sinusoidal solar + random EV toggle).
-- [ ] Battery sim background task (1s tick) + pricing formula + no-offer guard.
-- [ ] SQLite `readings(ts, solar_kw, battery_kwh, price, ev_plugged)`, insert each tick.
-- [ ] `POST /consume`: validate `kwh <= battery`, decrement, return new state; **409 if insufficient**.
+- [ ] **Owner: N, support: B.** FastAPI on :8001. Endpoints: `GET /status`, `GET /history?minutes=5`, `POST /consume {kwh}`.
+- [ ] **Owner: N.** Hardware layer: MCP3008 ADC ch0 → 0–5 kW; GPIO17 → ev_plugged; moving average (5 reads).
+- [ ] **Owner: N, support: B.** Mock fallback when `spidev` import fails (sinusoidal solar + random EV toggle).
+- [ ] **Owner: N.** Battery sim background task (1s tick) + pricing formula + no-offer guard.
+- [ ] **Owner: N.** SQLite `readings(ts, solar_kw, battery_kwh, price, ev_plugged)`, insert each tick.
+- [ ] **Owner: N, support: B.** `POST /consume`: validate `kwh <= battery`, decrement, return new state; **409 if insufficient**.
 - **Done when:** `/status` live values, `/history` rows, `/consume` decrements/rejects, mock mode works on laptop.
 
 ### Phase 3 — Hono x402 server (TS/laptop, ~5h) — can dev against mock Pi
-- [ ] Hono on :4021. Background poller fetches Pi `/status` every 2s (caches last-known).
-- [ ] `GET /status` (free, cached). `GET /energy/buy?kwh=X` behind **custom x402 handler** (not middleware).
-- [ ] Buy handler: parse kwh (default 1, max = battery); `total = kwh * price_per_kwh`.
-- [ ] No `X-PAYMENT` → return **402** with requirements (`scheme: exact`, network CAIP-2, `payTo: SELLER_ADDRESS`, `extra.asset: 10458941`).
-- [ ] With `X-PAYMENT` → `verifyPayment()` then `settlePayment()` → on success `POST` Pi `/consume {kwh}`.
-- [ ] Handle Pi 409 (refund/error). Append to `payments.jsonl`. Return 200 `{granted_kwh, price_paid, tx_id, timestamp, new_battery_kwh}`.
+- [ ] **Owner: N, support: B.** Hono on :4021. Background poller fetches Pi `/status` every 2s (caches last-known).
+- [ ] **Owner: N, support: B.** `GET /status` (free, cached). `GET /energy/buy?kwh=X` behind **custom x402 handler** (not middleware).
+- [ ] **Owner: N, support: B.** Buy handler: parse kwh (default 1, max = battery); `total = kwh * price_per_kwh`.
+- [ ] **Owner: N, support: B.** No `X-PAYMENT` → return **402** with requirements (`scheme: exact`, network CAIP-2, `payTo: SELLER_ADDRESS`, `extra.asset: 10458941`).
+- [ ] **Owner: N, support: B.** With `X-PAYMENT` → `verifyPayment()` then `settlePayment()` → on success `POST` Pi `/consume {kwh}`.
+- [ ] **Owner: N, support: B.** Handle Pi 409 (refund/error). Append to `payments.jsonl`. Return 200 `{granted_kwh, price_paid, tx_id, timestamp, new_battery_kwh}`.
 - **Done when:** `/status` cached data; `/energy/buy` returns 402 then settles+consumes+logs on valid payment.
 
 ### Phase 4 — Consumer agent (TS/laptop, ~5h) — needs Phase 3
-- [ ] x402 client: `toClientAvmSigner(mnemonicToSecretKey(BUYER_MNEMONIC))` → `x402Client().register(CAIP2, ExactAvmScheme)` → `wrapFetchWithPayment`.
-- [ ] State machine: `IDLE → EVALUATING → PAYING → CHARGING → IDLE`.
-- [ ] Poll server `/status` every 2s; buy when `ev_plugged && has_offer && price <= budget` via `fetchPay(/energy/buy?kwh=1)`.
-- [ ] Delivery countdown (3 kW rate); re-buy when delivery completes; stop when unplugged / over budget.
-- [ ] Budget tracking (`budget_remaining -= price_paid`); events array (max 100).
-- [ ] State server (Hono :4022): `GET /state`, `GET /events`.
+- [ ] **Owner: J, support: B.** x402 client: `toClientAvmSigner(mnemonicToSecretKey(BUYER_MNEMONIC))` → `x402Client().register(CAIP2, ExactAvmScheme)` → `wrapFetchWithPayment`.
+- [ ] **Owner: J, support: B.** State machine: `IDLE → EVALUATING → PAYING → CHARGING → IDLE`.
+- [ ] **Owner: J, support: B.** Poll server `/status` every 2s; buy when `ev_plugged && has_offer && price <= budget` via `fetchPay(/energy/buy?kwh=1)`.
+- [ ] **Owner: J.** Delivery countdown (3 kW rate); re-buy when delivery completes; stop when unplugged / over budget.
+- [ ] **Owner: J.** Budget tracking (`budget_remaining -= price_paid`); events array (max 100).
+- [ ] **Owner: J, support: B.** State server (Hono :4022): `GET /state`, `GET /events`.
 - **Done when:** agent autonomously buys, transitions correctly, re-buys after delivery, enforces budget; `/state` + `/events` correct; tx visible on Lora.
 
 ### Phase 5 — Streamlit dashboard (Python/laptop, ~4h) — needs 2/3/4
-- [ ] Auto-refresh (~2s). Gauges (`st.metric`) for solar/battery/price from Hono `/status`.
-- [ ] Plotly time-series (solar, battery sawtooth, price + budget line) from Pi `/history`.
-- [ ] Agent state badge from `/state`; EV flow indicator (3 kW when delivering).
-- [ ] Payment log (`st.dataframe`) from `/events` with **clickable Lora explorer links**.
+- [ ] **Owner: S, support: B.** Auto-refresh (~2s). Gauges (`st.metric`) for solar/battery/price from Hono `/status`.
+- [ ] **Owner: S, support: N.** Plotly time-series (solar, battery sawtooth, price + budget line) from Pi `/history`.
+- [ ] **Owner: S, support: J.** Agent state badge from `/state`; EV flow indicator (3 kW when delivering).
+- [ ] **Owner: S, support: B.** Payment log (`st.dataframe`) from `/events` with **clickable Lora explorer links**.
 - **Done when:** gauges track potentiometer; charts show sawtooth; payments show with Lora links; state badge correct.
 
 ### Phase 6 — Integration & demo polish (~4h, together)
-- [ ] Network: static IPs / verify `raspberrypi.local` over Ethernet.
-- [ ] Start scripts (Pi `start.sh`; laptop `start.sh` launching server + agent + dashboard).
-- [ ] End-to-end dry run: low pot → high price → no buy; high pot → price drops; plug EV → pay → CHARGING → battery drops, EV flow 3 kW, payment in log; delivery completes → re-buy; verify 2 tx on Lora; raise price above budget → agent stops; unplug → IDLE.
-- [ ] Error handling: Pi unreachable → cached status; 409 → agent waits; budget exhausted → stop; facilitator timeout → retry next cycle.
-- [ ] Demo script: 30s elevator pitch + 2-min walkthrough + **backup screen recording**.
+- [ ] **Owner: B, support: N.** Network: static IPs / verify `raspberrypi.local` over Ethernet.
+- [ ] **Owner: B, support: all.** Start scripts (Pi `start.sh`; laptop `start.sh` launching server + agent + dashboard).
+- [ ] **Owner: B, support: all.** End-to-end dry run: low pot → high price → no buy; high pot → price drops; plug EV → pay → CHARGING → battery drops, EV flow 3 kW, payment in log; delivery completes → re-buy; verify 2 tx on Lora; raise price above budget → agent stops; unplug → IDLE.
+- [ ] **Owner: B, support: N and J.** Error handling: Pi unreachable → cached status; 409 → agent waits; budget exhausted → stop; facilitator timeout → retry next cycle.
+- [ ] **Owner: B, support: S and J.** Demo script: 30s elevator pitch + 2-min walkthrough + **backup screen recording**.
 - **Done when:** full sequence runs **3× without failure**, each run shows **2+ on-chain payments on Lora**, errors handled, script rehearsed.
 
 ---
@@ -190,22 +190,20 @@ when `<= 0`, agent may buy again.
 
 ---
 
-## Team of 5 adaptation
+## Team of 4 adaptation
 
-The repo's split is 2 people (**Person A = Pi/Python**, **Person B = Laptop/TS+dashboard**).
-That's the critical path — keep those two owners. The extra **3 people** should run in parallel
-**without blocking the core happy path**:
+The repo's original split is 2 people (**Person A = Pi/Python**, **Person B = Laptop/TS+dashboard**).
+The current team has 4 people. Keep the core critical path narrow and use the operating model in
+[docs/team-operating-model.md](team-operating-model.md) for current ownership.
 
-- **Person C — Bonus track #1 (EURQ):** swap/extend payment asset to **Quantoz EURQ** (German
-  digital-euro narrative; Quantoz bonus). Use `@ever_amsterdam/x402-euro-eurd`. Build behind a
-  config flag so USDC stays the safe default for the live demo.
-- **Person D — "Serious" feature + pitch:** the **ARC-58 spend-policy** beat ("rogue agent tries
-  to exceed nightly budget → blocked on-chain"), plus owns the **pitch deck + demo script +
-  §42c law framing**. This is what lifts the project from "cute" to "fundable."
-- **Person E — Reliability + secondary bonus:** owns the **end-to-end dry-run harness, backup
-  recording, and network/process scripts** (de-risks the live demo), then opportunistically adds
-  **Folks Finance xALGO** (seller parks earnings to earn yield) *or* **Alpha Arcade** (anonymized
-  solar telemetry → forward/prediction market) — only if the core is rock-solid.
+| Area | Owner | Support | Notes |
+|---|---|---|---|
+| Pi/house emulator | N | B | N owns Raspberry Pi, FastAPI producer, hardware/mock state, pricing, and `/consume`. |
+| x402 payment loop | N | B | N leads, B pairs early to reduce the x402 bus factor. |
+| Consumer agent | J | B | J owns explainable agent behavior; deterministic state machine remains the critical path. |
+| Dashboard/demo UX | S | B | S owns visual clarity, payment log, and Lora proof; blockchain details are abstracted behind APIs. |
+| Coordination/integration | B | All | B owns task ownership, env readiness, integration order, dry runs, and tradeoffs. |
+| Market/legal research | J | B | J researches prior solutions and risks; B filters claims for product/pitch use. |
 
 > Organizers explicitly reward **focus over prize-stacking**. Ship the core happy path first;
 > add **at most one** bonus integration to the live demo. Others can be "shown but not central."

@@ -2,7 +2,8 @@
 
 ## 🧠 Problem
 
-With the introduction of §42c EnWG (Energy Sharing), households can sell surplus electricity directly to neighbors.
+With the introduction of §42c EnWG (Energy Sharing), households can be paid per kWh for sharing
+renewable surplus electricity with neighbors in the same balancing area, under regulated conditions.
 Current challenges:
 
 - No automated matching of supply & demand
@@ -16,13 +17,13 @@ Current challenges:
 
 ## 🚀 Solution
 
-An **agent-driven, local energy marketplace** where:
+An **agent-driven, regulated local energy-sharing layer** where:
 
 - Households offer their solar electricity
 - Consumers automatically source energy
 - AI Agents make decisions
-- Payments are settled directly via **x402 on Algorand** (USDC for sale, EURQ as addon)
-- (settled in Euros via stablecoin)
+- Payments are settled directly via **x402 on Algorand** (USDC for the demo, EURQ as addon)
+- EURQ can add regulated euro settlement as a bonus path
 
 ---
 
@@ -30,7 +31,7 @@ An **agent-driven, local energy marketplace** where:
 
 ### 🔋 Energy Flow
 
-Solar → Self-consumption → Storage → Sale → Neighbor / EV
+Solar → Self-consumption → Storage → Paid sharing → Neighbor / EV
 
 ---
 
