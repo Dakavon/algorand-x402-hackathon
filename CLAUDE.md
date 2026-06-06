@@ -65,6 +65,7 @@ and `docs/` add hackathon context, strategy, and a task distillation the repo do
 | [docs/06-build-plan-and-tasks.md](docs/06-build-plan-and-tasks.md) | **Concrete architecture, constants, 6-phase task checklist** |
 | [docs/07-prephase-setup-and-mock-plan.md](docs/07-prephase-setup-and-mock-plan.md) | **Pre-phase: wallet setup, roles, verified SDK, local mock-payment milestone (share this)** |
 | [docs/08-transaction-flow-explained.md](docs/08-transaction-flow-explained.md) | **End-to-end flow: accounts layer vs x402 protocol layer, the 402 handshake, code provenance** |
+| [docs/09-competitive-landscape-and-crypto-fit.md](docs/09-competitive-landscape-and-crypto-fit.md) | **Verified competitive landscape + why crypto/x402 fits; killed-claims cheat-sheet for the pitch** |
 | [docs/backend-design-spec.md](docs/backend-design-spec.md) | Backend service contracts and dashboard API endpoints |
 | [docs/frontend-react-design-spec.md](docs/frontend-react-design-spec.md) | React dashboard ownership, layout, components, and data needs |
 | [docs/system-design.md](docs/system-design.md) | System architecture, payment flow, boundaries, future product shape |
