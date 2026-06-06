@@ -15,8 +15,15 @@ from pydantic import BaseModel, Field
 
 ACCEL = float(os.getenv("ACCEL", "60"))
 PORT = int(os.getenv("PORT", "8001"))
-BATTERY_CAPACITY_KWH = 10.0
+# Bigger default pack so a one-time "fixed" purchase (e.g. 5 kWh) is deliverable in a
+# single transaction. Both are env-tunable for the real Pi / different demos.
+BATTERY_CAPACITY_KWH = float(os.getenv("BATTERY_CAPACITY_KWH", "20"))
+BATTERY_INITIAL_KWH = min(BATTERY_CAPACITY_KWH, float(os.getenv("BATTERY_INITIAL_KWH", "15")))
 SELF_CONSUMPTION_KW = 1.0
+# EV control. For a controlled fixed-mode demo, set EV_AUTO_TOGGLE=false and
+# EV_PLUGGED_DEFAULT=true so the EV stays plugged instead of flipping randomly.
+EV_AUTO_TOGGLE = os.getenv("EV_AUTO_TOGGLE", "true").lower() == "true"
+EV_PLUGGED_DEFAULT = os.getenv("EV_PLUGGED_DEFAULT", "false").lower() == "true"
 DB_PATH = Path(__file__).resolve().parent / "producer.db"
 
 
@@ -30,8 +37,8 @@ class ProducerRuntime:
         self.start_ts = time.time()
         self.last_tick_ts = time.time()
         self.last_toggle_ts = 0.0
-        self.battery_kwh = 6.0
-        self.ev_plugged = False
+        self.battery_kwh = BATTERY_INITIAL_KWH
+        self.ev_plugged = EV_PLUGGED_DEFAULT
         self.solar_kw = 2.0
 
     def _simulated_solar(self, now: float) -> float:
@@ -43,6 +50,9 @@ class ProducerRuntime:
 
     def _maybe_toggle_ev(self, now: float) -> None:
         # Flip EV plugged state occasionally so the agent can enter/exit charging.
+        # Disabled when EV_AUTO_TOGGLE=false (stable EV for a controlled demo).
+        if not EV_AUTO_TOGGLE:
+            return
         if now - self.last_toggle_ts < 12:
             return
         self.last_toggle_ts = now
@@ -74,6 +84,8 @@ class ProducerRuntime:
             "price_per_kwh": round(price, 3),
             "ev_plugged": self.ev_plugged,
             "has_offer": self.battery_kwh > 0 or self.solar_kw >= 1.0,
+            # How much can be sold in a single (e.g. one-time "fixed") purchase right now.
+            "available_kwh": round(self.battery_kwh, 3),
         }
 
     def consume(self, kwh: float) -> dict[str, float]:

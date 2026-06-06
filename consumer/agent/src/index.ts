@@ -3,6 +3,7 @@
 import { config } from "dotenv";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { x402Client, wrapFetchWithPayment, x402HTTPClient } from "@x402/fetch";
 import { toClientAvmSigner } from "@x402/avm";
 import { ExactAvmScheme } from "@x402/avm/exact/client";
@@ -32,6 +33,25 @@ const paymentNetwork = process.env.PAYMENT_NETWORK ?? ALGORAND_TESTNET_CAIP2;
 const loraNetworkPath = paymentNetwork === ALGORAND_MAINNET_CAIP2 ? "mainnet" : "testnet";
 const chargeRateKw = 3;
 
+// Algod node used to build payment transactions. If unset, @x402/avm falls back to
+// the FREE public AlgoNode endpoint, which rate-limits and returns HTTP 403 under
+// load (the cause of "Failed to create payment payload ... /v2/transactions/params
+// failed with status 403"). Point ALGOD_URL at a dedicated node (+ token) to avoid it.
+const algodUrl = process.env.ALGOD_URL;
+const algodToken = process.env.ALGOD_TOKEN ?? "";
+// How many times to retry a purchase when the node is transiently throttling (403/429/5xx).
+const buyRetries = Math.max(1, Number(process.env.BUY_RETRIES ?? 4));
+
+// Purchase mode:
+//   "fixed"   (default) — buy a user-selected amount in ONE payment, then go IDLE.
+//                         Few transactions; safest for rate-limited nodes & mainnet.
+//   "metered" — autonomous re-buy loop: keep buying small chunks as energy is used.
+// Switchable live via POST /mode (and the server's POST /control/mode).
+let purchaseMode: "fixed" | "metered" =
+  (process.env.PURCHASE_MODE ?? "fixed").toLowerCase() === "metered" ? "metered" : "fixed";
+// Amount (kWh) a one-time fixed purchase grabs when the caller doesn't specify one.
+const fixedKwh = Math.max(0.001, Number(process.env.FIXED_KWH ?? 5));
+
 type AgentLifecycle = "IDLE" | "EVALUATING" | "PAYING" | "CHARGING" | "WAITING" | "ERROR";
 
 type ProducerStatus = {
@@ -42,11 +62,13 @@ type ProducerStatus = {
   price_per_kwh: number;
   ev_plugged: boolean;
   has_offer: boolean;
+  available_kwh?: number;
   stale?: boolean;
 };
 
 type AgentState = {
   state: AgentLifecycle;
+  mode: "fixed" | "metered";
   solar_kw: number;
   battery_pct: number;
   price_per_kwh: number;
@@ -80,6 +102,7 @@ type BuyResponse = {
 const events: AgentEvent[] = [];
 let currentState: AgentState = {
   state: "IDLE",
+  mode: purchaseMode,
   solar_kw: 0,
   battery_pct: 0,
   price_per_kwh: 0,
@@ -94,6 +117,7 @@ let paymentFetch: ((input: RequestInfo | URL, init?: RequestInit) => Promise<Res
   null;
 let paymentInspector: x402HTTPClient | null = null;
 let loopBusy = false;
+let paused = false;
 let lastTickMs = Date.now();
 
 function nowSeconds(): number {
@@ -233,10 +257,73 @@ async function initPaymentClient(): Promise<void> {
   ]).toString("base64");
 
   const signer = toClientAvmSigner(secretKey);
-  const client = new x402Client().register("algorand:*", new ExactAvmScheme(signer));
+  const schemeConfig = algodUrl ? { algodUrl, algodToken } : undefined;
+  const client = new x402Client().register("algorand:*", new ExactAvmScheme(signer, schemeConfig));
   paymentFetch = wrapFetchWithPayment(fetch, client);
   paymentInspector = new x402HTTPClient(client);
   console.log(`🔌 Agent signer address: ${signer.address}`);
+  console.log(`   algod : ${algodUrl ?? "(default public AlgoNode — may rate-limit; set ALGOD_URL)"}`);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Buy with exponential backoff. Transient node/rate-limit errors (algod 403/429/5xx,
+// suggested-params failures) are common on the free public node; retrying a few times
+// with backoff lets most purchases through instead of dropping them.
+async function buyWithRetry(kwh: number): Promise<BuyResponse> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= buyRetries; attempt++) {
+    try {
+      return await buyEnergy(kwh);
+    } catch (error) {
+      lastError = error;
+      const msg = error instanceof Error ? error.message : String(error);
+      const transient = /\b(403|409|429|5\d\d)\b|params failed|ECONN|ETIMEDOUT|fetch failed|rate/i.test(msg);
+      if (!transient || attempt === buyRetries) break;
+      const backoffMs = Math.min(4000, 400 * 2 ** (attempt - 1));
+      pushEvent({
+        ts: nowSeconds(),
+        type: "DECISION",
+        message: `Node throttled (attempt ${attempt}/${buyRetries}) — retrying in ${backoffMs}ms`,
+      });
+      await sleep(backoffMs);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("buy failed");
+}
+
+// Execute a single x402 purchase and apply the result to agent state.
+// Used by both the autonomous loop and the manual /buy-now control.
+async function executePurchase(kwh: number): Promise<void> {
+  setState("PAYING", "Submitting x402 payment");
+
+  const result = await buyWithRetry(kwh);
+  currentState = {
+    ...currentState,
+    delivery_remaining_kwh: Number((currentState.delivery_remaining_kwh + result.granted_kwh).toFixed(6)),
+    budget_remaining_usdc: Number(
+      Math.max(0, currentState.budget_remaining_usdc - result.price_paid_usdc).toFixed(6),
+    ),
+    ...(result.tx_id ? { last_tx_id: result.tx_id } : {}),
+  };
+
+  pushEvent({
+    ts: nowSeconds(),
+    type: "PAYMENT",
+    message: `Paid ${result.price_paid_usdc.toFixed(3)} USDC for ${result.granted_kwh.toFixed(2)} kWh`,
+    kwh: result.granted_kwh,
+    price_usdc: result.price_paid_usdc,
+    ...(result.tx_id ? { tx_id: result.tx_id } : {}),
+    ...(result.lora_url ? { lora_url: result.lora_url } : {}),
+  });
+
+  if (result.tx_id) {
+    void reportPaymentToServer(result);
+  }
+
+  setState("CHARGING", `Delivery started (${currentState.delivery_remaining_kwh.toFixed(2)} kWh pending)`);
 }
 
 async function agentLoop(): Promise<void> {
@@ -255,6 +342,11 @@ async function agentLoop(): Promise<void> {
       max_price_per_kwh: maxPricePerKwh,
     };
 
+    if (paused) {
+      setState("WAITING", "Paused by operator");
+      return;
+    }
+
     if (!producer.ev_plugged) {
       setState("IDLE", "EV is unplugged");
       return;
@@ -262,6 +354,14 @@ async function agentLoop(): Promise<void> {
 
     if (currentState.delivery_remaining_kwh > 0) {
       setState("CHARGING", `Delivering ${currentState.delivery_remaining_kwh.toFixed(2)} kWh`);
+      return;
+    }
+
+    // Fixed (one-time) mode never auto-buys. The user selects an amount and pays once
+    // via /buy-now (server /control/buy); the agent then charges and returns here IDLE,
+    // waiting for the next explicit request. Only "metered" mode runs the re-buy loop.
+    if (purchaseMode === "fixed") {
+      setState("IDLE", "Fixed mode: waiting for a purchase request");
       return;
     }
 
@@ -288,7 +388,6 @@ async function agentLoop(): Promise<void> {
     setDecision(
       `Buying ${kwhPerPurchase.toFixed(2)} kWh because price ${producer.price_per_kwh.toFixed(3)} <= max ${maxPricePerKwh.toFixed(3)}`,
     );
-    setState("PAYING", "Submitting x402 payment");
 
     const result = await buyEnergy(kwhPerPurchase);
     currentState = {
@@ -331,6 +430,9 @@ async function agentLoop(): Promise<void> {
 
 const app = new Hono();
 
+// The server (and any direct dashboard call) may be a different origin.
+app.use("*", cors());
+
 app.get("/health", c =>
   c.json({
     ok: true,
@@ -344,6 +446,86 @@ app.get("/state", c => c.json(currentState));
 app.get("/events", c => {
   const limit = Math.max(1, Math.min(100, Number(c.req.query("limit") ?? "100") || 100));
   return c.json(events.slice(0, limit));
+});
+
+// --- Control plane (called by the server's /control/* endpoints) ---
+app.post("/buy-now", async c => {
+  const body = (await c.req.json().catch(() => ({}))) as { kwh?: number };
+  // In fixed mode a bare /buy-now grabs the configured one-time amount; in metered
+  // mode it falls back to the small per-chunk size used by the loop.
+  const defaultKwh = purchaseMode === "fixed" ? fixedKwh : kwhPerPurchase;
+  const kwh = typeof body.kwh === "number" && body.kwh > 0 ? body.kwh : defaultKwh;
+  if (loopBusy) return c.json({ ok: false, error: "agent busy" }, 409);
+  loopBusy = true;
+  try {
+    await executePurchase(kwh);
+    return c.json({ ok: true, last_tx_id: currentState.last_tx_id });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "buy failed";
+    pushEvent({ ts: nowSeconds(), type: "ERROR", message });
+    return c.json({ ok: false, error: message }, 500);
+  } finally {
+    loopBusy = false;
+  }
+});
+
+// Switch purchase mode live (fixed one-time <-> metered loop).
+app.post("/mode", async c => {
+  const body = (await c.req.json().catch(() => ({}))) as { mode?: string };
+  if (body.mode === "fixed" || body.mode === "metered") {
+    if (purchaseMode !== body.mode) {
+      purchaseMode = body.mode;
+      currentState = { ...currentState, mode: purchaseMode };
+      pushEvent({
+        ts: nowSeconds(),
+        type: "DECISION",
+        message: `Purchase mode -> ${purchaseMode}${purchaseMode === "fixed" ? ` (one-time ${fixedKwh.toFixed(2)} kWh)` : " (pay-as-you-use loop)"}`,
+      });
+    }
+  }
+  return c.json({ ok: true, mode: purchaseMode, fixed_kwh: fixedKwh });
+});
+
+app.post("/config", async c => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    budget_usd?: number;
+    max_price_per_kwh?: number;
+  };
+  if (typeof body.budget_usd === "number") {
+    currentState = { ...currentState, budget_remaining_usdc: Number(body.budget_usd.toFixed(6)) };
+  }
+  if (typeof body.max_price_per_kwh === "number") {
+    maxPricePerKwh = body.max_price_per_kwh;
+    currentState = { ...currentState, max_price_per_kwh: maxPricePerKwh };
+  }
+  return c.json({
+    ok: true,
+    budget_remaining_usdc: currentState.budget_remaining_usdc,
+    max_price_per_kwh: maxPricePerKwh,
+  });
+});
+
+app.post("/pause", async c => {
+  const body = (await c.req.json().catch(() => ({}))) as { paused?: boolean };
+  paused = Boolean(body.paused);
+  return c.json({ ok: true, paused });
+});
+
+app.post("/reset", async c => {
+  paused = false;
+  events.length = 0;
+  currentState = {
+    state: "IDLE",
+    mode: purchaseMode,
+    solar_kw: 0,
+    battery_pct: 0,
+    price_per_kwh: 0,
+    delivery_remaining_kwh: 0,
+    budget_remaining_usdc: Number(budgetUsd.toFixed(6)),
+    max_price_per_kwh: maxPricePerKwh,
+    decision_reason: "Reset by operator",
+  };
+  return c.json({ ok: true });
 });
 
 await initPaymentClient();
