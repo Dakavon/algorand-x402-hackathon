@@ -29,3 +29,8 @@ payments.jsonl
 # Tooling / local
 .claude/
 .DS_Store
+
+# Client mobile app (volt-connect) — its own git repo, synced from Lovable.
+# Ignored here so the two gits never interfere. Pull UI updates with:
+#   cd consumer/app && git pull
+consumer/app/

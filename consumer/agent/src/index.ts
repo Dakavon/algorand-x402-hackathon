@@ -28,8 +28,13 @@ const buyUrl = `${resourceServerUrl}${endpointPath}`;
 const port = Number(process.env.PORT ?? 4022);
 const budgetUsd = Number(process.env.BUDGET_USD ?? 5);
 let maxPricePerKwh = Number(process.env.MAX_PRICE_PER_KWH ?? 0.2);
-const kwhPerPurchase = Number(process.env.KWH_PER_PURCHASE ?? 1);
+// Per-chunk size for the metered re-buy loop. Mutable: the client UI sets it via
+// POST /charge/start (exposed to the UI as `chunk_kwh`).
+let kwhPerPurchase = Number(process.env.KWH_PER_PURCHASE ?? 1);
 const pollIntervalMs = Number(process.env.POLL_INTERVAL_MS ?? 2000);
+// Producer (Raspberry Pi) URL. Used to tell the Pi a charging session finished so it
+// can switch off the charging LED. Best-effort: ignored if the Pi isn't reachable.
+const piUrl = process.env.PI_URL ?? "http://localhost:8001";
 const accel = Number(process.env.ACCEL ?? 60);
 const chargeRateKw = 3;
 
@@ -77,12 +82,21 @@ type ProducerStatus = {
 type AgentState = {
   state: AgentLifecycle;
   mode: "fixed" | "metered";
+  // True when the producer reports the EV/charger is plugged in (Pi GPIO or sim).
+  charger_connected: boolean;
   solar_kw: number;
   battery_pct: number;
   price_per_kwh: number;
+  // How much energy the producer can sell right now.
+  available_kwh: number;
   delivery_remaining_kwh: number;
   budget_remaining: number;
   max_price_per_kwh: number;
+  // Per-purchase chunk size used by the metered loop (set via /charge/start).
+  chunk_kwh: number;
+  // Running totals for the CURRENT charging session (reset on /charge/start).
+  session_kwh: number;
+  session_spent: number;
   last_tx_id?: string;
   decision_reason?: string;
 };
@@ -108,12 +122,17 @@ const events: AgentEvent[] = [];
 let currentState: AgentState = {
   state: "IDLE",
   mode: purchaseMode,
+  charger_connected: false,
   solar_kw: 0,
   battery_pct: 0,
   price_per_kwh: 0,
+  available_kwh: 0,
   delivery_remaining_kwh: 0,
   budget_remaining: Number(budgetUsd.toFixed(6)),
   max_price_per_kwh: maxPricePerKwh,
+  chunk_kwh: kwhPerPurchase,
+  session_kwh: 0,
+  session_spent: 0,
   decision_reason: "Initializing",
 };
 
@@ -235,6 +254,24 @@ async function reportPaymentToServer(result: BuyResponse): Promise<void> {
     });
   } catch {
     // Non-fatal: the agent's own /events still carries the real tx.
+  }
+}
+
+// Tell the producer (Raspberry Pi) a charging session has finished, so it can switch
+// off the charging LED / mark the session closed. Best-effort: the Pi may not expose
+// this endpoint yet, so failures are swallowed.
+async function notifyChargingComplete(): Promise<void> {
+  try {
+    await fetch(`${piUrl}/charging-complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_kwh: currentState.session_kwh,
+        session_spent: currentState.session_spent,
+      }),
+    });
+  } catch {
+    // Non-fatal: Pi unreachable or endpoint not implemented yet.
   }
 }
 
@@ -361,6 +398,8 @@ async function executePurchase(kwh: number): Promise<void> {
     budget_remaining: Number(
       Math.max(0, currentState.budget_remaining - result.price_paid).toFixed(6),
     ),
+    session_kwh: Number((currentState.session_kwh + result.granted_kwh).toFixed(6)),
+    session_spent: Number((currentState.session_spent + result.price_paid).toFixed(6)),
     ...(result.tx_id ? { last_tx_id: result.tx_id } : {}),
   };
 
@@ -391,10 +430,13 @@ async function agentLoop(): Promise<void> {
 
     currentState = {
       ...currentState,
+      charger_connected: producer.ev_plugged,
       solar_kw: producer.solar_kw,
       battery_pct: producer.battery_pct,
       price_per_kwh: producer.price_per_kwh,
+      available_kwh: producer.available_kwh ?? producer.battery_kwh,
       max_price_per_kwh: maxPricePerKwh,
+      chunk_kwh: kwhPerPurchase,
     };
 
     if (paused) {
@@ -499,6 +541,72 @@ app.post("/buy-now", async c => {
   }
 });
 
+// --- Client mobile app (volt-connect) control plane ---
+// Start a charging session: configure the per-chunk size / budget / price cap, switch
+// to the metered re-buy loop, clear the session counters, and kick the loop so the
+// first purchase fires immediately. This is the buyer UI's "Start charging" button.
+app.post("/charge/start", async c => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    chunk_kwh?: number;
+    budget_usd?: number;
+    max_price_per_kwh?: number;
+  };
+  if (typeof body.chunk_kwh === "number" && body.chunk_kwh > 0) {
+    kwhPerPurchase = body.chunk_kwh;
+  }
+  if (typeof body.budget_usd === "number") {
+    currentState = { ...currentState, budget_remaining: Number(body.budget_usd.toFixed(6)) };
+  }
+  if (typeof body.max_price_per_kwh === "number") {
+    maxPricePerKwh = body.max_price_per_kwh;
+  }
+
+  purchaseMode = "metered";
+  paused = false;
+  currentState = {
+    ...currentState,
+    mode: purchaseMode,
+    chunk_kwh: kwhPerPurchase,
+    max_price_per_kwh: maxPricePerKwh,
+    session_kwh: 0,
+    session_spent: 0,
+  };
+  pushEvent({
+    ts: nowSeconds(),
+    type: "DECISION",
+    message: `Charging started — metered, ${kwhPerPurchase.toFixed(2)} kWh/chunk, max $${maxPricePerKwh.toFixed(3)}/kWh, budget $${currentState.budget_remaining.toFixed(2)}`,
+  });
+  // Snappy demo: evaluate + buy the first chunk now instead of waiting for the tick.
+  void agentLoop();
+  return c.json({
+    ok: true,
+    mode: purchaseMode,
+    chunk_kwh: kwhPerPurchase,
+    max_price_per_kwh: maxPricePerKwh,
+    budget_remaining: currentState.budget_remaining,
+  });
+});
+
+// Stop the charging session: pause the loop, return to one-time mode, and tell the Pi
+// the session is complete. This is the buyer UI's "Stop charging" button.
+app.post("/charge/stop", async c => {
+  paused = true;
+  purchaseMode = "fixed";
+  currentState = { ...currentState, mode: purchaseMode };
+  setState("IDLE", "Charging stopped by user");
+  pushEvent({
+    ts: nowSeconds(),
+    type: "DECISION",
+    message: `Charging stopped — delivered ${currentState.session_kwh.toFixed(2)} kWh for $${currentState.session_spent.toFixed(3)}`,
+  });
+  await notifyChargingComplete();
+  return c.json({
+    ok: true,
+    session_kwh: currentState.session_kwh,
+    session_spent: currentState.session_spent,
+  });
+});
+
 // Switch purchase mode live (fixed one-time <-> metered loop).
 app.post("/mode", async c => {
   const body = (await c.req.json().catch(() => ({}))) as { mode?: string };
@@ -547,12 +655,17 @@ app.post("/reset", async c => {
   currentState = {
     state: "IDLE",
     mode: purchaseMode,
+    charger_connected: false,
     solar_kw: 0,
     battery_pct: 0,
     price_per_kwh: 0,
+    available_kwh: 0,
     delivery_remaining_kwh: 0,
     budget_remaining: Number(budgetUsd.toFixed(6)),
     max_price_per_kwh: maxPricePerKwh,
+    chunk_kwh: kwhPerPurchase,
+    session_kwh: 0,
+    session_spent: 0,
     decision_reason: "Reset by operator",
   };
   return c.json({ ok: true });
