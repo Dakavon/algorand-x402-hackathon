@@ -171,7 +171,7 @@ function pushEvent(event: AgentEvent): void {
     event.type === "DECISION" ? "🤔" :
     event.type === "ERROR" ? "⚠️ " : "·";
   let line = `${icon} [${event.type}] ${event.message}`;
-  if (event.price !== undefined) line += `  ($${event.price.toFixed(3)})`;
+  if (event.price !== undefined) line += `  (${event.price.toFixed(3)} ${paymentAssetSymbol})`;
   if (event.tx_id) line += `\n     ↳ tx ${event.tx_id}\n     ↳ ${event.lora_url ?? `https://lora.algokit.io/${loraNetworkPath}/tx/${event.tx_id}`}`;
   console.log(line);
 }
@@ -284,24 +284,6 @@ async function reportPaymentToServer(result: BuyResponse): Promise<void> {
     });
   } catch {
     // Non-fatal: the agent's own /events still carries the real tx.
-  }
-}
-
-// Tell the producer (Raspberry Pi) a charging session has finished, so it can switch
-// off the charging LED / mark the session closed. Best-effort: the Pi may not expose
-// this endpoint yet, so failures are swallowed.
-async function notifyChargingComplete(): Promise<void> {
-  try {
-    await fetch(`${piUrl}/charging-complete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        session_kwh: currentState.session_kwh,
-        session_spent: currentState.session_spent,
-      }),
-    });
-  } catch {
-    // Non-fatal: Pi unreachable or endpoint not implemented yet.
   }
 }
 
@@ -644,7 +626,7 @@ app.post("/charge/start", async c => {
   pushEvent({
     ts: nowSeconds(),
     type: "DECISION",
-    message: `Charging started — metered, ${kwhPerPurchase.toFixed(2)} kWh/chunk, max $${maxPricePerKwh.toFixed(3)}/kWh, budget $${currentState.budget_remaining.toFixed(2)}`,
+    message: `Charging started — metered, ${kwhPerPurchase.toFixed(2)} kWh/chunk, max ${maxPricePerKwh.toFixed(3)} ${paymentAssetSymbol}/kWh, budget ${currentState.budget_remaining.toFixed(2)} ${paymentAssetSymbol}`,
   });
   // Snappy demo: evaluate + buy the first chunk now instead of waiting for the tick.
   void agentLoop();
@@ -667,9 +649,8 @@ app.post("/charge/stop", async c => {
   pushEvent({
     ts: nowSeconds(),
     type: "DECISION",
-    message: `Charging stopped — delivered ${currentState.session_kwh.toFixed(2)} kWh for $${currentState.session_spent.toFixed(3)}`,
+    message: `Charging stopped — delivered ${currentState.session_kwh.toFixed(2)} kWh for ${currentState.session_spent.toFixed(3)} ${paymentAssetSymbol}`,
   });
-  await notifyChargingComplete();
   return c.json({
     ok: true,
     session_kwh: currentState.session_kwh,

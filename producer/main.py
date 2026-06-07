@@ -57,13 +57,6 @@ class ConsumeRequest(BaseModel):
     kwh: float = Field(gt=0)
 
 
-class ChargingCompleteRequest(BaseModel):
-    # Sent by the consumer agent when the buyer ends a charging session.
-    # Both fields are optional/informational (we only use them for logging).
-    session_kwh: float | None = None
-    session_spent: float | None = None
-
-
 class ProducerRuntime:
     def __init__(self) -> None:
         self.lock = threading.Lock()
@@ -164,20 +157,7 @@ class ProducerRuntime:
                 "battery_pct": round(battery_pct, 3),
             }
 
-    def end_session(self) -> dict[str, float]:
-        # Called when the buyer stops charging: clear the charging indicator now so the
-        # LED switches off immediately (the next tick's _update_led keeps it off, since
-        # _charging_until is in the past). Does not touch battery/solar/EV state.
-        with self.lock:
-            self._charging_until = 0.0
-            self._set_led(False)
-            battery_pct = 0.0 if BATTERY_CAPACITY_KWH == 0 else self.battery_kwh / BATTERY_CAPACITY_KWH
-            return {
-                "battery_kwh": round(self.battery_kwh, 3),
-                "battery_pct": round(battery_pct, 3),
-            }
-
-
+    
 runtime = ProducerRuntime()
 app = FastAPI(title="Energy Producer Service")
 
@@ -282,20 +262,6 @@ def post_consume(payload: ConsumeRequest) -> dict[str, float | bool]:
 
     return {
         "ok": True,
-        "battery_kwh": updated["battery_kwh"],
-        "battery_pct": updated["battery_pct"],
-    }
-
-
-@app.post("/charging-complete")
-def post_charging_complete(payload: ChargingCompleteRequest) -> dict[str, object]:
-    # The consumer agent calls this (PI_URL/charging-complete) when the buyer taps
-    # "Stop charging". We just switch the charging LED off and acknowledge.
-    updated = runtime.end_session()
-    return {
-        "ok": True,
-        "session_kwh": payload.session_kwh,
-        "session_spent": payload.session_spent,
         "battery_kwh": updated["battery_kwh"],
         "battery_pct": updated["battery_pct"],
     }
