@@ -56,6 +56,7 @@ const fixedKwh = Math.max(0.001, Number(process.env.FIXED_KWH ?? 5));
 // the server's 402 response; this only affects URLs. For a mainnet test set
 // PAYMENT_NETWORK=mainnet AND point ALGOD_URL at a mainnet node (the suggested-params
 // genesis must match the settlement network).
+const paymentAssetSymbol = process.env.PAYMENT_ASSET_SYMBOL ?? "EURD";
 const loraNetworkPath =
   (process.env.PAYMENT_NETWORK ?? "testnet").toLowerCase() === "mainnet" ? "mainnet" : "testnet";
 
@@ -80,7 +81,7 @@ type AgentState = {
   battery_pct: number;
   price_per_kwh: number;
   delivery_remaining_kwh: number;
-  budget_remaining_usdc: number;
+  budget_remaining: number;
   max_price_per_kwh: number;
   last_tx_id?: string;
   decision_reason?: string;
@@ -91,14 +92,14 @@ type AgentEvent = {
   type: "STATE" | "DECISION" | "PAYMENT" | "ERROR";
   message: string;
   kwh?: number;
-  price_usdc?: number;
+  price?: number;
   tx_id?: string;
   lora_url?: string;
 };
 
 type BuyResponse = {
   granted_kwh: number;
-  price_paid_usdc: number;
+  price_paid: number;
   tx_id?: string;
   lora_url?: string;
 };
@@ -111,7 +112,7 @@ let currentState: AgentState = {
   battery_pct: 0,
   price_per_kwh: 0,
   delivery_remaining_kwh: 0,
-  budget_remaining_usdc: Number(budgetUsd.toFixed(6)),
+  budget_remaining: Number(budgetUsd.toFixed(6)),
   max_price_per_kwh: maxPricePerKwh,
   decision_reason: "Initializing",
 };
@@ -138,7 +139,7 @@ function pushEvent(event: AgentEvent): void {
     event.type === "DECISION" ? "🤔" :
     event.type === "ERROR" ? "⚠️ " : "·";
   let line = `${icon} [${event.type}] ${event.message}`;
-  if (event.price_usdc !== undefined) line += `  ($${event.price_usdc.toFixed(3)})`;
+  if (event.price !== undefined) line += `  ($${event.price.toFixed(3)})`;
   if (event.tx_id) line += `\n     ↳ tx ${event.tx_id}\n     ↳ ${event.lora_url ?? `https://lora.algokit.io/${loraNetworkPath}/tx/${event.tx_id}`}`;
   console.log(line);
 }
@@ -227,7 +228,7 @@ async function reportPaymentToServer(result: BuyResponse): Promise<void> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         kwh: result.granted_kwh,
-        price_paid_usdc: result.price_paid_usdc,
+        price_paid: result.price_paid,
         tx_id: result.tx_id,
         lora_url: result.lora_url,
       }),
@@ -357,8 +358,8 @@ async function executePurchase(kwh: number): Promise<void> {
   currentState = {
     ...currentState,
     delivery_remaining_kwh: Number((currentState.delivery_remaining_kwh + result.granted_kwh).toFixed(6)),
-    budget_remaining_usdc: Number(
-      Math.max(0, currentState.budget_remaining_usdc - result.price_paid_usdc).toFixed(6),
+    budget_remaining: Number(
+      Math.max(0, currentState.budget_remaining - result.price_paid).toFixed(6),
     ),
     ...(result.tx_id ? { last_tx_id: result.tx_id } : {}),
   };
@@ -366,9 +367,9 @@ async function executePurchase(kwh: number): Promise<void> {
   pushEvent({
     ts: nowSeconds(),
     type: "PAYMENT",
-    message: `Paid ${result.price_paid_usdc.toFixed(3)} USDC for ${result.granted_kwh.toFixed(2)} kWh`,
+    message: `Paid ${result.price_paid.toFixed(3)} ${paymentAssetSymbol} for ${result.granted_kwh.toFixed(2)} kWh`,
     kwh: result.granted_kwh,
-    price_usdc: result.price_paid_usdc,
+    price: result.price_paid,
     ...(result.tx_id ? { tx_id: result.tx_id } : {}),
     ...(result.lora_url ? { lora_url: result.lora_url } : {}),
   });
@@ -433,7 +434,7 @@ async function agentLoop(): Promise<void> {
     }
 
     const estimatedCost = Number((kwhPerPurchase * producer.price_per_kwh).toFixed(6));
-    if (currentState.budget_remaining_usdc < estimatedCost) {
+    if (currentState.budget_remaining < estimatedCost) {
       setState("WAITING", "Budget exhausted for next purchase");
       return;
     }
@@ -521,7 +522,7 @@ app.post("/config", async c => {
     max_price_per_kwh?: number;
   };
   if (typeof body.budget_usd === "number") {
-    currentState = { ...currentState, budget_remaining_usdc: Number(body.budget_usd.toFixed(6)) };
+    currentState = { ...currentState, budget_remaining: Number(body.budget_usd.toFixed(6)) };
   }
   if (typeof body.max_price_per_kwh === "number") {
     maxPricePerKwh = body.max_price_per_kwh;
@@ -529,7 +530,7 @@ app.post("/config", async c => {
   }
   return c.json({
     ok: true,
-    budget_remaining_usdc: currentState.budget_remaining_usdc,
+    budget_remaining: currentState.budget_remaining,
     max_price_per_kwh: maxPricePerKwh,
   });
 });
@@ -550,7 +551,7 @@ app.post("/reset", async c => {
     battery_pct: 0,
     price_per_kwh: 0,
     delivery_remaining_kwh: 0,
-    budget_remaining_usdc: Number(budgetUsd.toFixed(6)),
+    budget_remaining: Number(budgetUsd.toFixed(6)),
     max_price_per_kwh: maxPricePerKwh,
     decision_reason: "Reset by operator",
   };
@@ -568,8 +569,8 @@ serve({ fetch: app.fetch, port });
 console.log(`🤖 Consumer agent service listening at http://localhost:${port}`);
 console.log(`   server : ${resourceServerUrl}`);
 console.log(`   buy    : ${endpointPath}`);
-console.log(`   budget : ${budgetUsd.toFixed(2)} USDC`);
-console.log(`   max px : ${maxPricePerKwh.toFixed(3)} USDC/kWh`);
+console.log(`   budget : ${budgetUsd.toFixed(2)} ${paymentAssetSymbol}`);
+console.log(`   max px : ${maxPricePerKwh.toFixed(3)} ${paymentAssetSymbol}/kWh`);
 console.log(
   `   mode   : ${purchaseMode}${purchaseMode === "fixed" ? ` (one-time ${fixedKwh.toFixed(2)} kWh per buy — no auto-rebuy)` : " (pay-as-you-use loop)"}`,
 );

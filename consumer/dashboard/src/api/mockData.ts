@@ -18,14 +18,14 @@ export function mockSnapshot(): DashboardSnapshot {
     agent: {
       state: 'CHARGING',
       delivery_remaining_kwh: 0.58,
-      budget_remaining_usdc: 4.72,
+      budget_remaining: 4.72,
       max_price_per_kwh: 0.2,
       last_tx_id: 'MOCKTX123',
       decision_reason: 'Bought 1 kWh because price 0.13 <= max 0.20',
     },
     totals: {
       sold_kwh: 2,
-      spent_usdc: 0.28,
+      spent: 0.28,
       tx_count: 2,
       ev_power_kw: 3,
     },
@@ -62,9 +62,9 @@ export function mockEvents(): DashboardEvent[] {
     {
       ts,
       type: 'PAYMENT',
-      message: 'Paid 0.13 USDC for 1 kWh',
+      message: 'Paid 0.13 EURD for 1 kWh',
       kwh: 1,
-      price_usdc: 0.13,
+      price: 0.13,
       tx_id: 'MOCKTX123',
       lora_url: 'https://lora.algokit.io/testnet/transaction/MOCKTX123',
     },
@@ -91,7 +91,7 @@ export function mockPayments(): PaymentRow[] {
     {
       ts: now(),
       kwh: 1,
-      price_paid_usdc: 0.13,
+      price_paid: 0.13,
       tx_id: 'MOCKTX123',
       lora_url: 'https://lora.algokit.io/testnet/transaction/MOCKTX123',
     },

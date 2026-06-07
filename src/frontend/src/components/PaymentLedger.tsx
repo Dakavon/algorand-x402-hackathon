@@ -38,9 +38,9 @@ export function PaymentLedger({ events, payments }: PaymentLedgerProps) {
             {events.map((event) => {
               const payment = event.tx_id ? paymentMap.get(event.tx_id) : undefined
               const amount = payment
-                ? `${payment.kwh.toFixed(2)} kWh @ ${payment.price_paid_usdc.toFixed(2)} ${payment.asset_symbol ?? 'USDC'}`
-                : event.kwh !== undefined && event.price_usdc !== undefined
-                  ? `${event.kwh.toFixed(2)} kWh @ ${event.price_usdc.toFixed(2)} ${event.asset_symbol ?? 'USDC'}`
+                ? `${payment.kwh.toFixed(2)} kWh @ ${payment.price_paid.toFixed(2)} ${payment.asset_symbol ?? 'EURD'}`
+                : event.kwh !== undefined && event.price !== undefined
+                  ? `${event.kwh.toFixed(2)} kWh @ ${event.price.toFixed(2)} ${event.asset_symbol ?? 'EURD'}`
                   : '-'
               return (
                 <tr key={`${event.type}-${event.ts}-${event.message}`}>

@@ -6,7 +6,7 @@ type AgentPanelProps = {
 
 export function AgentPanel({ snapshot }: AgentPanelProps) {
   const { agent } = snapshot
-  const symbol = snapshot.payment_symbol ?? agent.payment_symbol ?? 'USDC'
+  const symbol = snapshot.payment_symbol ?? agent.payment_symbol ?? 'EURD'
 
   return (
     <section className="panel agent-panel" aria-label="Agent reasoning and controls">
@@ -21,7 +21,7 @@ export function AgentPanel({ snapshot }: AgentPanelProps) {
         </div>
         <div>
           <dt>Budget Left</dt>
-          <dd>{agent.budget_remaining_usdc.toFixed(2)} {symbol}</dd>
+          <dd>{agent.budget_remaining.toFixed(2)} {symbol}</dd>
         </div>
         <div>
           <dt>Max Price</dt>
