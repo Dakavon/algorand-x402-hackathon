@@ -19,11 +19,11 @@ export function AgentPanel({ snapshot }: AgentPanelProps) {
         </div>
         <div>
           <dt>Budget Left</dt>
-          <dd>{agent.budget_remaining_usdc.toFixed(2)} USDC</dd>
+          <dd>{agent.budget_remaining.toFixed(2)} EURD</dd>
         </div>
         <div>
           <dt>Max Price</dt>
-          <dd>{agent.max_price_per_kwh.toFixed(2)} USDC/kWh</dd>
+          <dd>{agent.max_price_per_kwh.toFixed(2)} EURD/kWh</dd>
         </div>
         <div>
           <dt>Delivery Remaining</dt>

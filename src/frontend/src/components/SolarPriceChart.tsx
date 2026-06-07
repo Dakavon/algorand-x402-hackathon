@@ -18,7 +18,7 @@ export function SolarPriceChart({ history }: SolarPriceChartProps) {
       footer={
         <div className="legend-row">
           <span className="legend-dot solar" /> Solar trend
-          <span className="legend-dot price" /> Latest price {price.at(-1)?.toFixed(3) ?? '0.000'} USDC/kWh
+          <span className="legend-dot price" /> Latest price {price.at(-1)?.toFixed(3) ?? '0.000'} EURD/kWh
         </div>
       }
     />

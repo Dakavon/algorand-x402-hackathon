@@ -28,18 +28,17 @@ const NETWORK =
 const avmAddress = process.env.AVM_ADDRESS;
 const facilitatorUrl = process.env.FACILITATOR_URL;
 const port = Number(process.env.PORT ?? 4021);
-const pricePerKwhUsd = process.env.PRICE_PER_KWH_USD ?? "0.01";
+const defaultPrice = process.env.PRICE_PER_KWH ?? "0.01";
 // Payment asset. Defaults to USDC for the network; override for a custom ASA (e.g. EURD).
 // The `price` ("$X") is interpreted in THIS asset's units, using these decimals.
 const isMainnetNet = NETWORK === ALGORAND_MAINNET_CAIP2;
-const networkUsdcId = isMainnetNet ? "31566704" : "10458941";
-const paymentAssetId = process.env.PAYMENT_ASSET_ID ?? networkUsdcId;
+const networkAssetId = isMainnetNet ? "31566704" : "10458941";
+const paymentAssetId = process.env.PAYMENT_ASSET_ID ?? networkAssetId;
 const paymentAssetDecimals = Number(process.env.PAYMENT_ASSET_DECIMALS ?? 6);
-const paymentAssetSymbol = process.env.PAYMENT_ASSET_SYMBOL ?? "USDC";
+const paymentAssetSymbol = process.env.PAYMENT_ASSET_SYMBOL ?? "EURD";
 // "$X" prices always resolve to USDC. A custom ASA (EURD/EURQ) must be priced as
 // { amount: <atomic units>, asset: <asa id> }. Atomic = price * 10^decimals.
-const usesCustomAsset = paymentAssetId !== networkUsdcId;
-const priceAtomicUnits = String(Math.round(Number(pricePerKwhUsd) * 10 ** paymentAssetDecimals));
+const usesCustomAsset = paymentAssetId !== networkAssetId;
 const producerUrl = process.env.PI_URL ?? "http://localhost:8001";
 const agentUrl = process.env.AGENT_URL ?? "http://localhost:4022";
 const KWH_PER_PURCHASE = 1;
@@ -65,7 +64,7 @@ type AgentState = {
   state: "IDLE" | "EVALUATING" | "PAYING" | "CHARGING" | "WAITING" | "ERROR";
   mode?: "fixed" | "metered";
   delivery_remaining_kwh: number;
-  budget_remaining_usdc: number;
+  budget_remaining: number;
   max_price_per_kwh: number;
   last_tx_id?: string;
   decision_reason?: string;
@@ -76,7 +75,7 @@ type DashboardEvent = {
   type: "STATE" | "DECISION" | "PAYMENT" | "ERROR";
   message: string;
   kwh?: number;
-  price_usdc?: number;
+  price?: number;
   tx_id?: string;
   lora_url?: string;
 };
@@ -84,7 +83,7 @@ type DashboardEvent = {
 type PaymentRow = {
   ts: number;
   kwh: number;
-  price_paid_usdc: number;
+  price_paid: number;
   tx_id: string;
   lora_url?: string;
 };
@@ -106,7 +105,7 @@ const fallbackProducer: ProducerStatus = {
   solar_kw: mockEvPlugged ? 4.2 : 0,
   battery_kwh: 10,
   battery_pct: 1,
-  price_per_kwh: Number(pricePerKwhUsd),
+  price_per_kwh: Number(defaultPrice),
   ev_plugged: mockEvPlugged,
   has_offer: true,
   available_kwh: 10,
@@ -117,14 +116,14 @@ const fallbackProducer: ProducerStatus = {
 // the no-Pi fallback producer; a live Pi's fresh /status still overrides them.
 const simControl = {
   ev_plugged: mockEvPlugged,
-  price_per_kwh: Number(pricePerKwhUsd),
+  price_per_kwh: Number(defaultPrice),
 };
 
 const fallbackAgent: AgentState = {
   state: "IDLE",
   delivery_remaining_kwh: 0,
-  budget_remaining_usdc: 0,
-  max_price_per_kwh: Number(pricePerKwhUsd),
+  budget_remaining: 0,
+  max_price_per_kwh: Number(defaultPrice),
   decision_reason: "Agent not reachable yet",
 };
 
@@ -233,13 +232,13 @@ function snapshotPayload() {
   const producerStatus = currentProducerStatus();
   const payments = readPaymentsLog();
   const soldKwh = payments.reduce((sum, row) => sum + row.kwh, 0);
-  const spentUsdc = payments.reduce((sum, row) => sum + row.price_paid_usdc, 0);
+  const totalSpent = payments.reduce((sum, row) => sum + row.price_paid, 0);
   return {
     producer: producerStatus,
     agent: agentCache,
     totals: {
       sold_kwh: Number(soldKwh.toFixed(3)),
-      spent_usdc: Number(spentUsdc.toFixed(6)),
+      spent: Number(totalSpent.toFixed(6)),
       tx_count: payments.length,
       ev_power_kw: agentCache.state === "CHARGING" ? 3 : 0,
     },
@@ -260,7 +259,7 @@ async function pollProducer(): Promise<void> {
         typeof status.price_per_kwh === "number"
           ? status.price_per_kwh
           : typeof status.price_per_kwh === "undefined"
-            ? Number(pricePerKwhUsd)
+            ? Number(defaultPrice)
             : Number(status.price_per_kwh),
     };
     producerLastSeenMs = Date.now();
@@ -293,10 +292,16 @@ const facilitatorClient = new HTTPFacilitatorClient({ url: facilitatorUrl });
 const accepts = [
   {
     scheme: "exact",
-    // USDC route: "$X" auto-maps to USDC. Custom ASA (EURD): explicit { amount, asset }.
-    price: usesCustomAsset
-      ? { amount: priceAtomicUnits, asset: paymentAssetId }
-      : `$${pricePerKwhUsd}`,
+    // Price is evaluated per-request from the live producer status.
+    // Custom ASA (EURD): { amount: <atomic units>, asset: <asa id> }.
+    // Default ($X): auto-mapped by the facilitator from the $ string.
+    price: () => {
+      const status = currentProducerStatus();
+      const currentPrice = status.price_per_kwh || Number(defaultPrice);
+      return usesCustomAsset
+        ? { amount: String(Math.round(currentPrice * 10 ** paymentAssetDecimals)), asset: paymentAssetId }
+        : `$${currentPrice}`;
+    },
     network: NETWORK,
     payTo: avmAddress,
   },
@@ -318,7 +323,7 @@ app.get("/health", c =>
     ok: true,
     role: "seller",
     network: NETWORK,
-    price_per_kwh_usd: pricePerKwhUsd,
+    default_price_per_kwh: defaultPrice,
     pay_to: avmAddress,
   }),
 );
@@ -378,7 +383,7 @@ app.post("/report-payment", async c => {
   if (
     !body ||
     typeof body.kwh !== "number" ||
-    typeof body.price_paid_usdc !== "number" ||
+    typeof body.price_paid !== "number" ||
     !body.tx_id
   ) {
     return c.json(apiError("INTERNAL_ERROR", "invalid payment report", false), 400);
@@ -386,7 +391,7 @@ app.post("/report-payment", async c => {
   const row: PaymentRow = {
     ts: nowSeconds(),
     kwh: body.kwh,
-    price_paid_usdc: body.price_paid_usdc,
+    price_paid: body.price_paid,
     tx_id: body.tx_id,
     ...(body.lora_url ? { lora_url: body.lora_url } : {}),
   };
@@ -394,9 +399,9 @@ app.post("/report-payment", async c => {
   addEvent({
     ts: row.ts,
     type: "PAYMENT",
-    message: `Paid ${row.price_paid_usdc.toFixed(2)} USDC for ${row.kwh.toFixed(2)} kWh`,
+    message: `Paid ${row.price_paid.toFixed(2)} ${paymentAssetSymbol} for ${row.kwh.toFixed(2)} kWh`,
     kwh: row.kwh,
-    price_usdc: row.price_paid_usdc,
+    price: row.price_paid,
     tx_id: row.tx_id,
     ...(row.lora_url ? { lora_url: row.lora_url } : {}),
   });
@@ -482,7 +487,7 @@ app.use(
     {
       "GET /energy/buy": {
         accepts,
-        description: "Buy solar energy (per kWh), settled in USDC on Algorand",
+        description: "Buy solar energy (per kWh), settled on Algorand",
         mimeType: "application/json",
       },
     },
@@ -502,8 +507,8 @@ app.get("/energy/buy", async c => {
     return c.json(apiError("NO_OFFER_AVAILABLE", "No surplus energy is available", true), 409);
   }
 
-  const unitPrice = status.price_per_kwh || Number(pricePerKwhUsd);
-  const pricePaidUsdc = Number((requestedKwh * unitPrice).toFixed(6));
+  const unitPrice = status.price_per_kwh || Number(defaultPrice);
+  const pricePaid = Number((requestedKwh * unitPrice).toFixed(6));
 
   if (producerHealth() === "ok") {
     try {
@@ -522,7 +527,7 @@ app.get("/energy/buy", async c => {
   // of truth for the ledger + Lora links. We deliberately do NOT fabricate a tx.
   return c.json({
     granted_kwh: requestedKwh,
-    price_paid_usdc: pricePaidUsdc,
+    price_paid: pricePaid,
     timestamp: new Date().toISOString(),
   });
 });
@@ -540,5 +545,5 @@ console.log(`⚡ Energy seller (x402 server) listening at http://localhost:${por
 console.log(`   network: ${isMainnetNet ? "⚠️  MAINNET (REAL FUNDS)" : "TestNet"}`);
 console.log(`   asset  : ${paymentAssetSymbol} (ASA ${paymentAssetId}, ${paymentAssetDecimals} dp)`);
 console.log(`   pay-to : ${avmAddress}`);
-console.log(`   price  : $${pricePerKwhUsd}/kWh (in ${paymentAssetSymbol})`);
+console.log(`   price  : ${defaultPrice} ${paymentAssetSymbol}/kWh (default)`);
 console.log(`   facil. : ${facilitatorUrl}`);

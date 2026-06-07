@@ -13,7 +13,7 @@ function price(value: number, symbol: string) {
 }
 
 export function MetricStrip({ snapshot }: MetricStripProps) {
-  const symbol = snapshot.payment_symbol ?? snapshot.agent.payment_symbol ?? 'USDC'
+  const symbol = snapshot.payment_symbol ?? snapshot.agent.payment_symbol ?? 'EURD'
 
   return (
     <section className="metric-strip" aria-label="Key live metrics">

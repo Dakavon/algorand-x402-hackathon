@@ -16,7 +16,7 @@ export type AgentLifecycle = 'IDLE' | 'EVALUATING' | 'PAYING' | 'CHARGING' | 'WA
 export type AgentState = {
   state: AgentLifecycle
   delivery_remaining_kwh: number
-  budget_remaining_usdc: number
+  budget_remaining: number
   max_price_per_kwh: number
   payment_symbol?: string
   last_tx_id?: string
@@ -31,8 +31,7 @@ export type DashboardSnapshot = {
   agent: AgentState
   totals: {
     sold_kwh: number
-    spent_usdc: number
-    spent_amount?: number
+    spent: number
     tx_count: number
     ev_power_kw: number
   }
@@ -48,7 +47,7 @@ export type DashboardEvent = {
   type: 'STATE' | 'DECISION' | 'PAYMENT' | 'ERROR'
   message: string
   kwh?: number
-  price_usdc?: number
+  price?: number
   asset_symbol?: string
   tx_id?: string
   lora_url?: string
@@ -66,7 +65,7 @@ export type HistoryPoint = {
 export type PaymentRow = {
   ts: number
   kwh: number
-  price_paid_usdc: number
+  price_paid: number
   asset_symbol?: string
   tx_id: string
   lora_url?: string

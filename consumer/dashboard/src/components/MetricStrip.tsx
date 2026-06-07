@@ -8,8 +8,8 @@ function pct(value: number) {
   return `${Math.round(value * 100)}%`
 }
 
-function usdc(value: number) {
-  return `${value.toFixed(2)} USDC/kWh`
+function price(value: number) {
+  return `${value.toFixed(2)} EURD/kWh`
 }
 
 export function MetricStrip({ snapshot }: MetricStripProps) {
@@ -25,7 +25,7 @@ export function MetricStrip({ snapshot }: MetricStripProps) {
       </article>
       <article className="metric-card">
         <h3>Price</h3>
-        <p>{usdc(snapshot.producer.price_per_kwh)}</p>
+        <p>{price(snapshot.producer.price_per_kwh)}</p>
       </article>
       <article className="metric-card">
         <h3>EV Plug</h3>
