@@ -3,6 +3,7 @@ import { BatteryChart } from './components/BatteryChart'
 import { EnergyFlow } from './components/EnergyFlow'
 import { MetricStrip } from './components/MetricStrip'
 import { PaymentLedger } from './components/PaymentLedger'
+import { SolarInflowChart } from './components/SolarInflowChart'
 import { SolarPriceChart } from './components/SolarPriceChart'
 import { SystemHealth } from './components/SystemHealth'
 import { useDashboardData } from './hooks/useDashboardData'
@@ -40,6 +41,7 @@ function App() {
       <section className="two-col charts">
         <SolarPriceChart history={history} />
         <BatteryChart history={history} />
+        <SolarInflowChart history={history} />
       </section>
 
       <PaymentLedger events={events} payments={payments} />

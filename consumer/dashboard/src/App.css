@@ -231,9 +231,56 @@ h1 {
   margin-top: 0.6rem;
 }
 
+.chart-panel {
+  min-height: 360px;
+}
+
 .chart-bg {
   fill: #f3f9fd;
   stroke: #d5e7f1;
+}
+
+.chart-axis {
+  stroke: #8aa7b5;
+  stroke-width: 1.5;
+}
+
+.chart-label {
+  fill: #4f6e7b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chart-label-x {
+  font-size: 11px;
+}
+
+.chart-axis-title {
+  fill: #0f2f3a;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.chart-hover-point {
+  fill: #2a9d8f;
+  stroke: #ffffff;
+  stroke-width: 2;
+}
+
+.chart-tooltip-bg {
+  fill: #173743;
+  opacity: 0.95;
+}
+
+.chart-tooltip-label {
+  fill: #c6e6ef;
+  font-size: 8px;
+}
+
+.chart-tooltip-value {
+  fill: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .chart-footer {
