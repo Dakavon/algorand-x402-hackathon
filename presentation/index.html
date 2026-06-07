@@ -426,6 +426,52 @@
         line-height: 1.45;
       }
 
+      .slide-controls {
+        position: fixed;
+        top: clamp(12px, 2.4svh, 24px);
+        left: clamp(12px, 2.4vw, 24px);
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid var(--rule);
+        background: color-mix(in srgb, var(--paper) 92%, transparent);
+        backdrop-filter: blur(10px);
+        color: var(--ink);
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1;
+      }
+
+      .slide-controls button {
+        padding: 9px 10px;
+        border: 1px solid var(--rule);
+        background: var(--paper);
+        color: var(--ink);
+        font: inherit;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+
+      .slide-controls button:not(:disabled):hover {
+        border-color: var(--accent);
+        color: var(--accent-hover);
+      }
+
+      .slide-controls button:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+
+      .slide-controls span {
+        min-width: 44px;
+        color: var(--muted);
+        text-align: center;
+      }
+
       @media (min-width: 768px) {
         .slide {
           padding: clamp(28px, 5svh, 56px) 32px;
@@ -483,6 +529,10 @@
           display: flex;
           min-height: 100vh;
           page-break-after: always;
+        }
+
+        .slide-controls {
+          display: none;
         }
       }
     </style>
@@ -672,9 +722,19 @@
       </section>
     </main>
 
+    <nav class="slide-controls" aria-label="Slide navigation">
+      <button type="button" data-prev-slide aria-label="Previous slide">Prev</button>
+      <span data-slide-count aria-live="polite">1 / 6</span>
+      <button type="button" data-next-slide aria-label="Next slide">Next</button>
+    </nav>
+
     <script>
       const slides = Array.from(document.querySelectorAll(".slide"));
       let activeIndex = 0;
+
+      const previousButton = document.querySelector("[data-prev-slide]");
+      const nextButton = document.querySelector("[data-next-slide]");
+      const slideCount = document.querySelector("[data-slide-count]");
 
       function setSlide(index) {
         activeIndex = Math.max(0, Math.min(slides.length - 1, index));
@@ -683,6 +743,9 @@
           slide.classList.toggle("active", isActive);
           slide.setAttribute("aria-hidden", String(!isActive));
         });
+        if (slideCount) slideCount.textContent = `${activeIndex + 1} / ${slides.length}`;
+        if (previousButton) previousButton.toggleAttribute("disabled", activeIndex === 0);
+        if (nextButton) nextButton.toggleAttribute("disabled", activeIndex === slides.length - 1);
         slides[activeIndex].focus({ preventScroll: true });
         window.history.replaceState(null, "", `#${activeIndex + 1}`);
       }
@@ -690,6 +753,35 @@
       function go(delta) {
         setSlide(activeIndex + delta);
       }
+
+      previousButton?.addEventListener("click", () => go(-1));
+      nextButton?.addEventListener("click", () => go(1));
+
+      let touchStartX = 0;
+      let touchStartY = 0;
+
+      document.addEventListener(
+        "touchstart",
+        (event) => {
+          const touch = event.changedTouches[0];
+          touchStartX = touch.clientX;
+          touchStartY = touch.clientY;
+        },
+        { passive: true },
+      );
+
+      document.addEventListener(
+        "touchend",
+        (event) => {
+          const touch = event.changedTouches[0];
+          const deltaX = touch.clientX - touchStartX;
+          const deltaY = touch.clientY - touchStartY;
+          if (Math.abs(deltaX) > 48 && Math.abs(deltaX) > Math.abs(deltaY) * 1.4) {
+            go(deltaX < 0 ? 1 : -1);
+          }
+        },
+        { passive: true },
+      );
 
       document.addEventListener("keydown", (event) => {
         const key = event.key.toLowerCase();
