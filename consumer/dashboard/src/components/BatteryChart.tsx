@@ -7,12 +7,13 @@ type BatteryChartProps = {
 
 export function BatteryChart({ history }: BatteryChartProps) {
   const batteryPct = history.map((point) => point.battery_pct)
+  const maxBattery = Math.max(...batteryPct, 0.01)
 
   return (
     <LineChart
       title="Battery"
       subtitle="Should show a sawtooth pattern: recharge then purchase drop"
-      points={toChartPoints(batteryPct, 1)}
+      points={toChartPoints(batteryPct, maxBattery)}
       color="#06d6a0"
       footer={<span>Latest battery: {Math.round((batteryPct.at(-1) ?? 0) * 100)}%</span>}
     />
