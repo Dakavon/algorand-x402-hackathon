@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="P2P Agentic Energy Sharing pitch deck" />
+    <title>Volt402. P2P Agentic Energy Sharing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --ink: #1a1a1a;
+        --paper: #fafaf7;
+        --muted: #6b6b6b;
+        --rule: #d8d6d0;
+        --accent: #5a6c4f;
+        --accent-hover: #3d4a35;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        height: 100%;
+        overflow: hidden;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: "Source Serif 4", Georgia, serif;
+      }
+
+      body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--paper);
+        color: var(--ink);
+      }
+
+      main {
+        height: 100svh;
+      }
+
+      ::selection {
+        background: color-mix(in srgb, var(--accent) 20%, transparent);
+        color: var(--ink);
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 3px;
+      }
+
+      a:hover {
+        color: var(--accent-hover);
+      }
+
+      a:focus-visible,
+      section:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .slide {
+        position: fixed;
+        inset: 0;
+        height: 100svh;
+        padding: clamp(20px, 4svh, 40px) 24px;
+        display: none;
+        align-items: center;
+        overflow: hidden;
+        background: var(--paper);
+      }
+
+      .slide.active {
+        display: flex;
+      }
+
+      .page {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        max-width: min(720px, calc(100vw - 48px));
+        max-height: calc(100svh - 48px);
+        margin: 0 auto;
+        overflow: hidden;
+      }
+
+      .media-slide {
+        align-items: flex-end;
+      }
+
+      .slide-hero {
+        align-items: flex-end;
+        justify-content: flex-end;
+      }
+
+      .slide-build {
+        align-items: flex-start;
+        justify-content: flex-end;
+      }
+
+      .slide-law {
+        align-items: flex-start;
+        justify-content: flex-start;
+      }
+
+      .media-slide .page {
+        margin: 0;
+        padding: clamp(18px, 2.5svh, 28px);
+        border: 1px solid var(--rule);
+        background: var(--paper);
+      }
+
+      .media-slide .page.compact {
+        max-width: min(640px, calc(100vw - 48px));
+      }
+
+      .slide-hero .page.compact,
+      .slide-build .page.compact {
+        max-width: min(560px, calc(100vw - 48px));
+      }
+
+      .slide-law .page.compact {
+        max-width: min(360px, calc(100vw - 48px));
+      }
+
+      .kicker,
+      .meta-label,
+      .section-number,
+      .footer,
+      .mono,
+      th {
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .mono {
+        overflow-wrap: anywhere;
+      }
+
+      .kicker {
+        margin: 0 0 clamp(8px, 1.6svh, 16px);
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        margin-bottom: clamp(8px, 1.8svh, 16px);
+        font-size: clamp(42px, 7vw, 74px);
+        font-weight: 600;
+        line-height: 0.95;
+        letter-spacing: -0.045em;
+      }
+
+      h2 {
+        margin-bottom: clamp(14px, 2.4svh, 24px);
+        font-size: clamp(30px, 5vw, 52px);
+        font-weight: 600;
+        line-height: 1.02;
+        letter-spacing: -0.035em;
+      }
+
+      h3 {
+        margin-bottom: clamp(6px, 1.2svh, 12px);
+        font-size: clamp(20px, 2.7vw, 28px);
+        font-weight: 600;
+        line-height: 1.12;
+        letter-spacing: -0.02em;
+      }
+
+      .tagline,
+      .outcome,
+      .date-line {
+        font-style: italic;
+      }
+
+      .tagline {
+        margin-bottom: clamp(14px, 2.8svh, 28px);
+        font-size: clamp(22px, 3.4vw, 34px);
+        line-height: 1.14;
+        letter-spacing: -0.025em;
+      }
+
+      .body-copy {
+        font-size: clamp(18px, 2.2vw, 25px);
+        line-height: 1.28;
+        letter-spacing: -0.015em;
+      }
+
+      .body-copy + table {
+        margin-top: clamp(18px, 3svh, 32px);
+      }
+
+      .body-copy + .body-copy,
+      .body-copy + .note,
+      .note + .note {
+        margin-top: 16px;
+      }
+
+      .note {
+        color: var(--muted);
+        font-size: clamp(14px, 1.55vw, 18px);
+        line-height: 1.42;
+      }
+
+      .outcome {
+        margin-top: clamp(8px, 1.8svh, 16px);
+        color: var(--muted);
+        font-size: clamp(14px, 1.55vw, 18px);
+        line-height: 1.4;
+      }
+
+      hr {
+        width: 100%;
+        margin: clamp(18px, 3svh, 32px) 0;
+        border: 0;
+        border-top: 1px solid var(--rule);
+      }
+
+      .metadata-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: clamp(12px, 2svh, 24px) 32px;
+        margin: clamp(14px, 2.6svh, 28px) 0;
+      }
+
+      .metadata-item {
+        border-top: 1px solid var(--rule);
+        padding-top: 10px;
+      }
+
+      .meta-label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .meta-value {
+        display: block;
+        font-size: clamp(15px, 1.55vw, 18px);
+        line-height: 1.3;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: clamp(13px, 1.45vw, 17px);
+        line-height: 1.32;
+      }
+
+      th,
+      td {
+        padding: clamp(6px, 1.2svh, 12px) 0;
+        border-bottom: 1px solid var(--rule);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      td + td,
+      th + th {
+        padding-left: 24px;
+      }
+
+      figure {
+        margin: clamp(16px, 2.8svh, 28px) 0 0;
+      }
+
+      img,
+      video {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 1px solid var(--rule);
+        background: var(--paper);
+      }
+
+      .media-slide .media-frame {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        margin: 0;
+      }
+
+      .media-slide .media-frame img,
+      .media-slide .media-frame video {
+        width: 100vw;
+        height: 100svh;
+        border: 0;
+        object-fit: cover;
+      }
+
+      .media-slide .statute-frame img {
+        object-fit: contain;
+      }
+
+      .dense table {
+        font-size: clamp(12px, 1.25vw, 15px);
+        line-height: 1.25;
+      }
+
+      .dense td {
+        padding: clamp(5px, 0.9svh, 9px) 0;
+      }
+
+      .dense .outcome {
+        font-size: clamp(13px, 1.35vw, 16px);
+      }
+
+      .statute-frame.is-missing-image img {
+        display: none;
+      }
+
+      .statute-excerpt {
+        display: none;
+        width: 100vw;
+        height: 100svh;
+        padding: clamp(28px, 5svh, 56px) clamp(24px, 5vw, 56px);
+        background: var(--paper);
+        color: var(--ink);
+        overflow: hidden;
+      }
+
+      .statute-frame.is-missing-image .statute-excerpt {
+        display: block;
+      }
+
+      .statute-excerpt .source-line {
+        margin-bottom: 24px;
+        color: var(--muted);
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .statute-excerpt .norm-title {
+        max-width: 840px;
+        margin-bottom: 24px;
+        font-size: clamp(28px, 4.4vw, 48px);
+        line-height: 1.04;
+        letter-spacing: -0.035em;
+      }
+
+      .statute-excerpt p {
+        max-width: 980px;
+        font-size: clamp(15px, 1.55vw, 20px);
+        line-height: 1.38;
+      }
+
+      .statute-excerpt p + p {
+        margin-top: 16px;
+      }
+
+      .media-slide .media-frame figcaption {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        padding: 8px 24px;
+        margin: 0;
+        border-top: 1px solid var(--rule);
+        background: var(--paper);
+        color: var(--muted);
+      }
+
+      figcaption {
+        margin-top: 10px;
+        color: var(--muted);
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .media-fallback {
+        display: none;
+      }
+
+      .media-frame.is-missing-video .media-video {
+        display: none;
+      }
+
+      .media-frame.is-missing-video .media-fallback {
+        display: block;
+      }
+
+      .split-list {
+        display: grid;
+        gap: clamp(12px, 2.4svh, 24px);
+      }
+
+      .highlight-block {
+        border-top: 1px solid var(--rule);
+        padding-top: 16px;
+      }
+
+      .highlight-block p {
+        margin-top: 8px;
+      }
+
+      .footer {
+        margin-top: clamp(12px, 2.4svh, 24px);
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      @media (min-width: 768px) {
+        .slide {
+          padding: clamp(28px, 5svh, 56px) 32px;
+        }
+
+        .metadata-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+
+      @media (max-height: 820px) {
+        h1 {
+          font-size: clamp(38px, 6vw, 62px);
+        }
+
+        h2 {
+          font-size: clamp(28px, 4.4vw, 44px);
+        }
+
+        .tagline,
+        .body-copy {
+          font-size: clamp(18px, 2vw, 23px);
+        }
+
+        .page {
+          max-height: calc(100svh - 40px);
+        }
+
+        .media-slide .page {
+          padding: 18px;
+        }
+
+        th,
+        .kicker,
+        .meta-label,
+        figcaption,
+        .footer {
+          font-size: 11px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+
+      @media print {
+        html {
+          scroll-snap-type: none;
+        }
+
+        .slide {
+          position: relative;
+          display: flex;
+          min-height: 100vh;
+          page-break-after: always;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="slide media-slide slide-hero active" id="slide-1" tabindex="-1" aria-labelledby="title" aria-hidden="false">
+        <figure class="media-frame is-missing-video" data-video-frame>
+          <video class="media-video" data-video muted loop playsinline preload="metadata" poster="../images/IMG_20260607_102742337.jpg">
+            <source src="../images/VID_20260607_102832239.mp4" type="video/mp4" />
+          </video>
+          <img class="media-fallback" src="../images/IMG_20260607_102742337.jpg" alt="Small model house with solar panels and an orange EV used for the demo narrative" />
+          <figcaption>Physical demo narrative: EV, neighbour house, rooftop solar.</figcaption>
+        </figure>
+        <div class="page compact">
+          <p class="kicker">Algorand Builders Berlin · Agentic Commerce x402</p>
+          <h1 id="title">Volt402. P2P Agentic Energy Sharing</h1>
+          <p class="tagline">Your EV buys neighbour solar with EURD over x402 while you sleep.</p>
+          <div class="metadata-grid" aria-label="Project metadata">
+            <div class="metadata-item">
+              <span class="meta-label">Primary</span>
+              <span class="meta-value">Agentic Commerce</span>
+            </div>
+            <div class="metadata-item">
+              <span class="meta-label">Bonus</span>
+              <span class="meta-value">Quantoz · Alpha Arcade</span>
+            </div>
+            <div class="metadata-item">
+              <span class="meta-label">Settlement</span>
+              <span class="meta-value">Real EURD on Algorand mainnet</span>
+            </div>
+            <div class="metadata-item">
+              <span class="meta-label">Proof</span>
+              <span class="meta-value">Clickable Lora transaction per charging chunk</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide media-slide slide-law" id="slide-2" tabindex="-1" aria-labelledby="slide-2-title" aria-hidden="true">
+        <figure class="media-frame statute-frame">
+          <img src="../images/law.png" alt="Screenshot of the official Section 42c EnWG statute page" />
+          <figcaption>Official statute reference: https://www.gesetze-im-internet.de/enwg_2005/__42c.html</figcaption>
+        </figure>
+        <div class="page compact">
+          <p class="kicker">Slide 2</p>
+          <h2 id="slide-2-title">§&nbsp;2 · Legal basis</h2>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-3" tabindex="-1" aria-labelledby="slide-3-title" aria-hidden="true">
+        <div class="page">
+          <p class="kicker">Context</p>
+          <h2 id="slide-3-title">§&nbsp;3 · Why this exists</h2>
+          <p class="body-copy">Energy sharing is becoming legally possible, but still operationally manual. The missing layer is matching, pricing, authorization, settlement, and proof.</p>
+          <table aria-label="Market incident and product gap">
+            <thead>
+              <tr>
+                <th>Signal</th>
+                <th>Implication</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Germany, 25 June 2024</td>
+                <td>Day-ahead power cleared near EUR 492/MWh after market decoupling.</td>
+              </tr>
+              <tr>
+                <td>France, same auction</td>
+                <td>Prices near EUR 2.96/MWh exposed how coordination failures create local spreads.</td>
+              </tr>
+              <tr>
+                <td>Our layer</td>
+                <td>Local agents automate offer selection, payment, and proof for regulated sharing.</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="outcome">We do not replace wholesale markets. We automate the local remuneration layer.</p>
+        </div>
+      </section>
+
+      <section class="slide media-slide slide-build" id="slide-4" tabindex="-1" aria-labelledby="slide-4-title" aria-hidden="true">
+        <figure class="media-frame">
+          <img src="../images/IMG_20260607_084901918.jpg" alt="Raspberry Pi hardware used by the producer service" />
+          <figcaption>Producer hardware: Raspberry Pi, GPIO state, sensor wiring, and the physical control surface used for the demo.</figcaption>
+        </figure>
+        <div class="page compact">
+          <p class="kicker">Implemented system</p>
+          <h2 id="slide-4-title">§&nbsp;4 · Built in the hackathon window</h2>
+          <table aria-label="Implemented components">
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>Role in the transaction</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Producer</td>
+                <td>Raspberry Pi reads hardware state, computes solar surplus, prices energy, and releases delivery.</td>
+              </tr>
+              <tr>
+                <td>Seller server</td>
+                <td>Hono resource server exposes `/energy/buy` as an x402-protected per-kWh endpoint.</td>
+              </tr>
+              <tr>
+                <td>EV agent</td>
+                <td>Autonomously evaluates price and budget, signs the payment, and re-buys in metered chunks.</td>
+              </tr>
+              <tr>
+                <td>Mobile app</td>
+                <td>Starts and stops the charging session; shows reasoning, wallet balance, savings, and Lora proof.</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="outcome">The browser client never signs. Money movement stays in the backend agent with policy limits.</p>
+        </div>
+      </section>
+
+      <section class="slide dense" id="slide-5" tabindex="-1" aria-labelledby="slide-5-title" aria-hidden="true">
+        <div class="page">
+          <p class="kicker">Payment rail</p>
+          <h2 id="slide-5-title">§&nbsp;5 · Why crypto, Algorand, Regulated Stablecoin and x402</h2>
+          <table aria-label="Payment rail justification">
+            <thead>
+              <tr>
+                <th>Question</th>
+                <th>Answer</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Why not Visa or SEPA</td>
+                <td>They are human checkout and reconciliation rails with per-transaction economics. Paying every small charging chunk is not viable when each payment carries banking or card overhead.</td>
+              </tr>
+              <tr>
+                <td>Why crypto</td>
+                <td>Autonomous machines need final settlement, direct transfer, programmable spend limits, and micropayment economics that still work for sub-euro kWh chunks.</td>
+              </tr>
+              <tr>
+                <td>Why x402</td>
+                <td>It makes energy an HTTP-native paid resource: request, receive `402 Payment Required`, attach payment, receive delivery authorization.</td>
+              </tr>
+              <tr>
+                <td>Why Algorand</td>
+                <td>Low fees, fast finality, ASA support, GoPlausible facilitator support, and Lora proof make per-kWh settlement practical.</td>
+              </tr>
+              <tr>
+                <td>Why regulated stablecoin</td>
+                <td>Energy is priced in cents per kWh. EURD/EURQ gives a euro-denominated unit without card-network fee structure, while staying closer to household bills and accounting.</td>
+              </tr>
+              <tr>
+                <td>Live proof</td>
+                <td><a class="mono" href="https://lora.algokit.io/mainnet/tx/SDLASLD23VEVSLUV3G5WHJZBSMUWFWS3MGN2ZKIVEMINBWOC2XVQ">SDLASLD23VEVSLUV3G5WHJZBSMUWFWS3MGN2ZKIVEMINBWOC2XVQ</a></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="outcome">The payment is not a demo row. It is the settlement primitive the agent uses to unlock delivery.</p>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-6" tabindex="-1" aria-labelledby="slide-6-title" aria-hidden="true">
+        <div class="page">
+          <p class="kicker">Milestone structure</p>
+          <h2 id="slide-6-title">§&nbsp;6 · Delivered now, marketplace next</h2>
+          <p class="body-copy">The hackathon milestone proves one hardware-backed seller and one EV agent can settle real energy payments. The second milestone turns that loop into a local marketplace.</p>
+          <table aria-label="Prize track roadmap">
+            <thead>
+              <tr>
+                <th>Track</th>
+                <th>Integration path</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Quantoz</td>
+                <td>EURD is already live on mainnet. EURQ is the production upgrade path for regulated euro settlement.</td>
+              </tr>
+              <tr>
+                <td>Alpha Arcade</td>
+                <td>Sellers publish future surplus, price, and confidence. That data becomes a forward market: will this grid area have cheap solar tomorrow.</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="outcome">Alpha prices uncertainty, Quantoz provides regulated euro settlement, and x402 settles actual delivery.</p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const slides = Array.from(document.querySelectorAll(".slide"));
+      let activeIndex = 0;
+
+      function setSlide(index) {
+        activeIndex = Math.max(0, Math.min(slides.length - 1, index));
+        slides.forEach((slide, slideIndex) => {
+          const isActive = slideIndex === activeIndex;
+          slide.classList.toggle("active", isActive);
+          slide.setAttribute("aria-hidden", String(!isActive));
+        });
+        slides[activeIndex].focus({ preventScroll: true });
+        window.history.replaceState(null, "", `#${activeIndex + 1}`);
+      }
+
+      function go(delta) {
+        setSlide(activeIndex + delta);
+      }
+
+      document.addEventListener("keydown", (event) => {
+        const key = event.key.toLowerCase();
+        if (["arrowdown", "arrowright", " ", "pagedown", "enter"].includes(key)) {
+          event.preventDefault();
+          go(1);
+        }
+        if (["arrowup", "arrowleft", "pageup", "backspace"].includes(key)) {
+          event.preventDefault();
+          go(-1);
+        }
+        if (key >= "1" && key <= String(slides.length)) {
+          event.preventDefault();
+          setSlide(Number(key) - 1);
+        }
+      });
+
+      const hashIndex = Number(window.location.hash.replace("#", ""));
+      if (Number.isFinite(hashIndex) && hashIndex >= 1 && hashIndex <= slides.length) {
+        setSlide(hashIndex - 1);
+      } else {
+        setSlide(0);
+      }
+
+      const video = document.querySelector("[data-video]");
+      const frame = document.querySelector("[data-video-frame]");
+      if (video && frame) {
+        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+        const markMissing = () => frame.classList.add("is-missing-video");
+        const markPresent = () => {
+          frame.classList.remove("is-missing-video");
+          if (!reducedMotion.matches) video.play().catch(() => undefined);
+        };
+        video.addEventListener("loadeddata", markPresent, { once: true });
+        video.addEventListener("error", markMissing, { once: true });
+        window.setTimeout(() => {
+          if (video.readyState === 0) markMissing();
+        }, 1200);
+      }
+
+      const statuteImage = document.querySelector("[data-statute-image]");
+      const statuteFrame = document.querySelector("[data-statute-frame]");
+      if (statuteImage && statuteFrame) {
+        const showExcerpt = () => statuteFrame.classList.add("is-missing-image");
+        const showScreenshot = () => statuteFrame.classList.remove("is-missing-image");
+        if (statuteImage.complete && statuteImage.naturalWidth > 0) showScreenshot();
+        statuteImage.addEventListener("load", showScreenshot, { once: true });
+        statuteImage.addEventListener("error", showExcerpt, { once: true });
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,65 @@
+name: Publish presentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "presentation/**"
+      - "images/**"
+      - ".github/workflows/presentation-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: presentation-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}presentation/
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare static artifact
+        run: |
+          mkdir -p site
+          mkdir -p site/images
+          cp -R presentation site/presentation
+          cp images/VID_20260607_102832239.mp4 site/images/
+          cp images/IMG_20260607_102742337.jpg site/images/
+          cp images/IMG_20260607_084901918.jpg site/images/
+          cp images/law.png site/images/
+          cat > site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <meta http-equiv="refresh" content="0; url=./presentation/" />
+              <title>Volt402 Presentation</title>
+            </head>
+            <body>
+              <a href="./presentation/">Open Volt402 presentation</a>
+            </body>
+          </html>
+          HTML
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
