@@ -45,16 +45,18 @@ export function LineChart({
         { x: plotLeft + plotWidth, y: plotTop + plotHeight, value: 0, label: 'End' },
       ]
 
-  const maxValue = Math.max(...safePoints.map((point) => point.value), 1)
+  const rawMaxValue = Math.max(...safePoints.map((point) => point.value))
+  const rawMinValue = Math.min(...safePoints.map((point) => point.value))
+  const valueRange = Math.max(rawMaxValue - rawMinValue, 1e-9)
   const yTicks = useMemo(
     () =>
       Array.from({ length: 5 }, (_, index) => {
         const ratio = index / 4
         const y = plotTop + ratio * plotHeight
-        const value = maxValue * (1 - ratio)
+        const value = rawMaxValue - ratio * valueRange
         return { y, value }
       }),
-    [maxValue],
+    [plotHeight, plotTop, rawMaxValue, valueRange],
   )
 
   const xTicks = useMemo(() => {
@@ -168,8 +170,10 @@ export function LineChart({
   )
 }
 
-export function toChartPoints(values: number[], max = 1, labels?: string[]): Point[] {
-  const safeMax = max <= 0 ? 1 : max
+export function toChartPoints(values: number[], max = 1, labels?: string[], min = 0): Point[] {
+  const safeMax = Number.isFinite(max) ? max : 1
+  const safeMin = Number.isFinite(min) ? min : 0
+  const range = Math.max(safeMax - safeMin, 1e-9)
   const svgWidth = 620
   const svgHeight = 250
   const plotLeft = 56
@@ -190,7 +194,8 @@ export function toChartPoints(values: number[], max = 1, labels?: string[]): Poi
 
   return values.map((value, index) => {
     const x = offsetX + (index / Math.max(values.length - 1, 1)) * width
-    const y = offsetY + (1 - Math.min(Math.max(value / safeMax, 0), 1)) * height
+    const normalized = (value - safeMin) / range
+    const y = offsetY + (1 - Math.min(Math.max(normalized, 0), 1)) * height
     return { x, y, value, label: labels?.[index] ?? String(index + 1) }
   })
 }

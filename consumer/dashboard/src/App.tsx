@@ -39,7 +39,7 @@ function App() {
       </section>
 
       <section className="two-col charts">
-        <SolarPriceChart history={history} />
+        <SolarPriceChart history={history} latestPrice={snapshot.producer.price_per_kwh} />
         <BatteryChart history={history} />
         <SolarInflowChart history={history} />
       </section>
