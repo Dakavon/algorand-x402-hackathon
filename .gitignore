@@ -5,6 +5,7 @@
 
 # Node / TypeScript
 node_modules/
+consumer/app/node_modules/
 dist/
 *.tsbuildinfo
 
@@ -64,3 +65,4 @@ dist-ssr
 *.sw?
 
 *.lock
+
