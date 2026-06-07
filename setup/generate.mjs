@@ -29,5 +29,5 @@ console.log('2) Opt-in USDC: node setup/optin.mjs "<mnemonic>"      (run for BOT
 console.log("3) Fund USDC  : https://faucet.circle.com              (select Algorand Testnet)");
 console.log("4) Verify     : node setup/balances.mjs <address>      (both should show ALGO + USDC)\n");
 console.log("THEN PUT");
-console.log("  SELLER address  -> server/.env           as AVM_ADDRESS");
-console.log("  BUYER  mnemonic -> consumer/agent/.env   as AVM_MNEMONIC   (never commit)\n");
+console.log("  SELLER address  -> src/x402/server/.env   as SELLER_ADDRESS");
+console.log("  BUYER  mnemonic -> src/x402/client/.env   as BUYER_MNEMONIC   (never commit)\n");
