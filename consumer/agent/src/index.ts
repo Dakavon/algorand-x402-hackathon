@@ -171,7 +171,7 @@ function pushEvent(event: AgentEvent): void {
     event.type === "DECISION" ? "🤔" :
     event.type === "ERROR" ? "⚠️ " : "·";
   let line = `${icon} [${event.type}] ${event.message}`;
-  if (event.price !== undefined) line += `  ($${event.price.toFixed(3)})`;
+  if (event.price !== undefined) line += `  (${event.price.toFixed(3)} ${paymentAssetSymbol})`;
   if (event.tx_id) line += `\n     ↳ tx ${event.tx_id}\n     ↳ ${event.lora_url ?? `https://lora.algokit.io/${loraNetworkPath}/tx/${event.tx_id}`}`;
   console.log(line);
 }
@@ -626,7 +626,7 @@ app.post("/charge/start", async c => {
   pushEvent({
     ts: nowSeconds(),
     type: "DECISION",
-    message: `Charging started — metered, ${kwhPerPurchase.toFixed(2)} kWh/chunk, max $${maxPricePerKwh.toFixed(3)}/kWh, budget $${currentState.budget_remaining.toFixed(2)}`,
+    message: `Charging started — metered, ${kwhPerPurchase.toFixed(2)} kWh/chunk, max ${maxPricePerKwh.toFixed(3)} ${paymentAssetSymbol}/kWh, budget ${currentState.budget_remaining.toFixed(2)} ${paymentAssetSymbol}`,
   });
   // Snappy demo: evaluate + buy the first chunk now instead of waiting for the tick.
   void agentLoop();
@@ -649,7 +649,7 @@ app.post("/charge/stop", async c => {
   pushEvent({
     ts: nowSeconds(),
     type: "DECISION",
-    message: `Charging stopped — delivered ${currentState.session_kwh.toFixed(2)} kWh for $${currentState.session_spent.toFixed(3)}`,
+    message: `Charging stopped — delivered ${currentState.session_kwh.toFixed(2)} kWh for ${currentState.session_spent.toFixed(3)} ${paymentAssetSymbol}`,
   });
   return c.json({
     ok: true,
