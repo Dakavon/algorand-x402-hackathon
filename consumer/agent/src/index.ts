@@ -65,6 +65,17 @@ const paymentAssetSymbol = process.env.PAYMENT_ASSET_SYMBOL ?? "EURD";
 const loraNetworkPath =
   (process.env.PAYMENT_NETWORK ?? "testnet").toLowerCase() === "mainnet" ? "mainnet" : "testnet";
 
+// Payment asset (ASA) the GET /wallet endpoint reports a balance for. Defaults to the
+// mainnet EURD asset; override via PAYMENT_ASSET_ID for TestNet/other assets.
+const paymentAssetId = Number(process.env.PAYMENT_ASSET_ID ?? 1221682136);
+// Algod REST base for read-only balance lookups. Reuses ALGOD_URL if set, else a public
+// node for the configured network.
+const algodRestBase =
+  algodUrl ??
+  (loraNetworkPath === "mainnet"
+    ? "https://mainnet-api.4160.nodely.dev"
+    : "https://testnet-api.4160.nodely.dev");
+
 type AgentLifecycle = "IDLE" | "EVALUATING" | "PAYING" | "CHARGING" | "WAITING" | "ERROR";
 
 type ProducerStatus = {
@@ -139,6 +150,8 @@ let currentState: AgentState = {
 let paymentFetch: ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) | null =
   null;
 let paymentInspector: x402HTTPClient | null = null;
+let signerAddress: string | null = null;
+let cachedAssetDecimals: number | null = null;
 let loopBusy = false;
 let paused = false;
 let lastTickMs = Date.now();
@@ -202,6 +215,23 @@ function applyDeliveryTick(): void {
     ...currentState,
     delivery_remaining_kwh: Number(nextDelivery.toFixed(6)),
   };
+}
+
+// Look up (and cache) the payment asset's decimals from algod, so balances convert
+// from base units correctly. Falls back to 2 if the lookup fails.
+async function fetchAssetDecimals(): Promise<number> {
+  if (cachedAssetDecimals !== null) return cachedAssetDecimals;
+  try {
+    const r = await fetch(
+      `${algodRestBase}/v2/assets/${paymentAssetId}`,
+      algodToken ? { headers: { "X-Algo-API-Token": algodToken } } : undefined,
+    );
+    const j = (await r.json()) as { params?: { decimals?: number } };
+    cachedAssetDecimals = Number(j?.params?.decimals ?? 2);
+  } catch {
+    cachedAssetDecimals = 2;
+  }
+  return cachedAssetDecimals;
 }
 
 async function fetchProducerStatus(): Promise<ProducerStatus> {
@@ -352,6 +382,7 @@ async function initPaymentClient(): Promise<void> {
   const client = new x402Client().register("algorand:*", new ExactAvmScheme(signer, schemeConfig));
   paymentFetch = wrapFetchWithPayment(fetch, client);
   paymentInspector = new x402HTTPClient(client);
+  signerAddress = signer.address;
   console.log(`🔌 Agent signer address: ${signer.address}  [${signerKind}]`);
   console.log(`   network: ${loraNetworkPath === "mainnet" ? "⚠️  MAINNET (REAL FUNDS)" : "TestNet"}`);
   console.log(`   algod : ${algodUrl ?? "(default public AlgoNode — may rate-limit; set ALGOD_URL)"}`);
@@ -514,6 +545,45 @@ app.get("/health", c =>
 );
 
 app.get("/state", c => c.json(currentState));
+
+// Read-only wallet balance for the buyer UI: the agent signer's payment-asset (EURD)
+// balance + ALGO (for fees). Queried straight from algod; never signs anything.
+app.get("/wallet", async c => {
+  if (!signerAddress) {
+    return c.json({ configured: false, asset_symbol: paymentAssetSymbol, asset_id: paymentAssetId });
+  }
+  try {
+    const r = await fetch(
+      `${algodRestBase}/v2/accounts/${signerAddress}`,
+      algodToken ? { headers: { "X-Algo-API-Token": algodToken } } : undefined,
+    );
+    if (!r.ok) throw new Error(`account fetch failed (${r.status})`);
+    const acct = (await r.json()) as {
+      amount?: number;
+      assets?: { "asset-id": number; amount: number }[];
+    };
+    const decimals = await fetchAssetDecimals();
+    const holding = (acct.assets ?? []).find(a => a["asset-id"] === paymentAssetId);
+    return c.json({
+      configured: true,
+      address: signerAddress,
+      algo: Number(((acct.amount ?? 0) / 1e6).toFixed(6)),
+      balance: holding ? Number((holding.amount / 10 ** decimals).toFixed(6)) : 0,
+      asset_symbol: paymentAssetSymbol,
+      asset_id: paymentAssetId,
+      decimals,
+      network: loraNetworkPath,
+    });
+  } catch (error) {
+    return c.json({
+      configured: true,
+      address: signerAddress,
+      asset_symbol: paymentAssetSymbol,
+      asset_id: paymentAssetId,
+      error: error instanceof Error ? error.message : "wallet fetch failed",
+    });
+  }
+});
 
 app.get("/events", c => {
   const limit = Math.max(1, Math.min(100, Number(c.req.query("limit") ?? "100") || 100));
