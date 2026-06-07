@@ -26,6 +26,8 @@ payments.jsonl
 *.jpeg
 *.JPG
 *.JPEG
+!images/IMG_20260607_102742337.jpg
+!images/IMG_20260607_084901918.jpg
 
 # Tooling / local
 .claude/
@@ -65,4 +67,3 @@ dist-ssr
 *.sw?
 
 *.lock
-
