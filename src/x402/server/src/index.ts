@@ -18,7 +18,7 @@ const ALGORAND_MAINNET_CAIP2 = "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzk
 const sellerAddress = process.env.SELLER_ADDRESS;
 const facilitatorUrl = process.env.FACILITATOR_URL;
 const port = Number(process.env.PORT ?? 4021);
-const pricePerKwh = process.env.PRICE_PER_KWH ?? process.env.PRICE_PER_KWH_USD ?? "0.01";
+const pricePerKwh = process.env.PRICE_PER_KWH ?? "0.01";
 const paymentAssetSymbol = process.env.PAYMENT_ASSET_SYMBOL ?? "USDC";
 const paymentAssetId = process.env.PAYMENT_ASSET_ID ?? process.env.USDC_ASSET_ID ?? "10458941";
 const paymentAssetDecimals = Number(process.env.PAYMENT_ASSET_DECIMALS ?? 6);
@@ -332,7 +332,6 @@ app.get("/health", c =>
     payment_asset_id: paymentAssetId,
     payment_symbol: paymentAssetSymbol,
     price_per_kwh: Number(pricePerKwh),
-    price_per_kwh_usd: Number(pricePerKwh),
     pay_to: sellerAddress,
   }),
 );

@@ -28,7 +28,7 @@ const NETWORK =
 const avmAddress = process.env.AVM_ADDRESS;
 const facilitatorUrl = process.env.FACILITATOR_URL;
 const port = Number(process.env.PORT ?? 4021);
-const pricePerKwhUsd = process.env.PRICE_PER_KWH_USD ?? "0.01";
+const defaultPrice = process.env.PRICE_PER_KWH ?? "0.01";
 // Payment asset. Defaults to USDC for the network; override for a custom ASA (e.g. EURD).
 // The `price` ("$X") is interpreted in THIS asset's units, using these decimals.
 const isMainnetNet = NETWORK === ALGORAND_MAINNET_CAIP2;
@@ -39,7 +39,6 @@ const paymentAssetSymbol = process.env.PAYMENT_ASSET_SYMBOL ?? "EURD";
 // "$X" prices always resolve to USDC. A custom ASA (EURD/EURQ) must be priced as
 // { amount: <atomic units>, asset: <asa id> }. Atomic = price * 10^decimals.
 const usesCustomAsset = paymentAssetId !== networkAssetId;
-const priceAtomicUnits = String(Math.round(Number(pricePerKwhUsd) * 10 ** paymentAssetDecimals));
 const producerUrl = process.env.PI_URL ?? "http://localhost:8001";
 const agentUrl = process.env.AGENT_URL ?? "http://localhost:4022";
 const KWH_PER_PURCHASE = 1;
@@ -106,7 +105,7 @@ const fallbackProducer: ProducerStatus = {
   solar_kw: mockEvPlugged ? 4.2 : 0,
   battery_kwh: 10,
   battery_pct: 1,
-  price_per_kwh: Number(pricePerKwhUsd),
+  price_per_kwh: Number(defaultPrice),
   ev_plugged: mockEvPlugged,
   has_offer: true,
   available_kwh: 10,
@@ -117,14 +116,14 @@ const fallbackProducer: ProducerStatus = {
 // the no-Pi fallback producer; a live Pi's fresh /status still overrides them.
 const simControl = {
   ev_plugged: mockEvPlugged,
-  price_per_kwh: Number(pricePerKwhUsd),
+  price_per_kwh: Number(defaultPrice),
 };
 
 const fallbackAgent: AgentState = {
   state: "IDLE",
   delivery_remaining_kwh: 0,
   budget_remaining: 0,
-  max_price_per_kwh: Number(pricePerKwhUsd),
+  max_price_per_kwh: Number(defaultPrice),
   decision_reason: "Agent not reachable yet",
 };
 
@@ -260,7 +259,7 @@ async function pollProducer(): Promise<void> {
         typeof status.price_per_kwh === "number"
           ? status.price_per_kwh
           : typeof status.price_per_kwh === "undefined"
-            ? Number(pricePerKwhUsd)
+            ? Number(defaultPrice)
             : Number(status.price_per_kwh),
     };
     producerLastSeenMs = Date.now();
@@ -293,10 +292,16 @@ const facilitatorClient = new HTTPFacilitatorClient({ url: facilitatorUrl });
 const accepts = [
   {
     scheme: "exact",
-    // USDC route: "$X" auto-maps to USDC. Custom ASA (EURD): explicit { amount, asset }.
-    price: usesCustomAsset
-      ? { amount: priceAtomicUnits, asset: paymentAssetId }
-      : `$${pricePerKwhUsd}`,
+    // Price is evaluated per-request from the live producer status.
+    // Custom ASA (EURD): { amount: <atomic units>, asset: <asa id> }.
+    // Default ($X): auto-mapped by the facilitator from the $ string.
+    price: () => {
+      const status = currentProducerStatus();
+      const currentPrice = status.price_per_kwh || Number(defaultPrice);
+      return usesCustomAsset
+        ? { amount: String(Math.round(currentPrice * 10 ** paymentAssetDecimals)), asset: paymentAssetId }
+        : `$${currentPrice}`;
+    },
     network: NETWORK,
     payTo: avmAddress,
   },
@@ -318,7 +323,7 @@ app.get("/health", c =>
     ok: true,
     role: "seller",
     network: NETWORK,
-    price_per_kwh_usd: pricePerKwhUsd,
+    default_price_per_kwh: defaultPrice,
     pay_to: avmAddress,
   }),
 );
@@ -502,7 +507,7 @@ app.get("/energy/buy", async c => {
     return c.json(apiError("NO_OFFER_AVAILABLE", "No surplus energy is available", true), 409);
   }
 
-  const unitPrice = status.price_per_kwh || Number(pricePerKwhUsd);
+  const unitPrice = status.price_per_kwh || Number(defaultPrice);
   const pricePaid = Number((requestedKwh * unitPrice).toFixed(6));
 
   if (producerHealth() === "ok") {
@@ -540,5 +545,5 @@ console.log(`⚡ Energy seller (x402 server) listening at http://localhost:${por
 console.log(`   network: ${isMainnetNet ? "⚠️  MAINNET (REAL FUNDS)" : "TestNet"}`);
 console.log(`   asset  : ${paymentAssetSymbol} (ASA ${paymentAssetId}, ${paymentAssetDecimals} dp)`);
 console.log(`   pay-to : ${avmAddress}`);
-console.log(`   price  : $${pricePerKwhUsd}/kWh (in ${paymentAssetSymbol})`);
+console.log(`   price  : ${defaultPrice} ${paymentAssetSymbol}/kWh (default)`);
 console.log(`   facil. : ${facilitatorUrl}`);
